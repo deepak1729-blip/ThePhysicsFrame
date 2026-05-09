@@ -577,23 +577,70 @@ class Scene2_ForceAndAcceleration(Scene):
             rate_func=rate_functions.ease_out_cubic
         )
         self.play(FadeIn(subtitle_a, shift=DOWN * 0.1), run_time=0.4)
-        self.wait(2.0)
+        self.wait(1.6)
 
-        cliff = Text(
-            "Can we combine them?",
-            font="Segoe UI", font_size=32,
-            color=COLOR_AMBER, weight=BOLD, slant=ITALIC
-        ).to_edge(DOWN, buff=0.8)
+        # ══════════════════════════════════════════════════════════
+        #  ACT 8 · MERGE — Two puzzle pieces unite into F ∝ m·a
+        # ══════════════════════════════════════════════════════════
         self.play(
-            FadeIn(cliff, shift=UP * 0.15),
-            run_time=0.7,
-            rate_func=rate_functions.ease_out_back
+            FadeOut(subtitle_m, shift=UP * 0.1),
+            FadeOut(subtitle_a, shift=UP * 0.1),
+            run_time=0.45
         )
-        self.wait(2.5)
 
-        # ══════════════════════════════════════════════════════════
-        #  FINAL FADE
-        # ══════════════════════════════════════════════════════════
-        objects_to_fade = [m for m in self.mobjects if m is not grid]
-        self.play(FadeOut(Group(*objects_to_fade)), run_time=1.0)
-        self.wait(0.4)
+        merge_scale = 0.78
+        combined_eq = MathTex(
+            "F", r"\propto", "m", r"\cdot", "a",
+            font_size=110, color=COLOR_WHITE
+        )
+        combined_eq[0].set_color(COLOR_VEC_F)
+        combined_eq[2].set_color(COLOR_AMBER)
+        combined_eq[3].set_color(COLOR_GROUND)
+        combined_eq[4].set_color(COLOR_AMBER)
+        combined_eq.scale(merge_scale).move_to(DOWN * 0.4)
+
+        combined_box = RoundedRectangle(
+            corner_radius=0.18 * merge_scale,
+            width=combined_eq.width + 1.2 * merge_scale,
+            height=combined_eq.height + 0.7 * merge_scale,
+            stroke_color=COLOR_AMBER, stroke_width=2.5,
+            stroke_opacity=0.85, fill_opacity=0
+        ).move_to(combined_eq.get_center())
+
+        # Phase 1 — pieces drift toward each other
+        self.play(
+            VGroup(prop_eq_m, eq_box_m).animate.shift(RIGHT * 1.3),
+            VGroup(prop_eq, eq_box).animate.shift(LEFT * 1.3),
+            run_time=0.9,
+            rate_func=rate_functions.ease_in_out_sine
+        )
+        self.wait(0.1)
+
+        # Phase 2 — snap together: F's and ∝'s overlap, m and a join with ·
+        self.play(
+            # left piece's parts morph to combined positions
+            ReplacementTransform(prop_eq_m[0], combined_eq[0]),
+            ReplacementTransform(prop_eq_m[1], combined_eq[1]),
+            ReplacementTransform(prop_eq_m[2], combined_eq[2]),
+            # right piece's a slides into its slot
+            ReplacementTransform(prop_eq[2], combined_eq[4]),
+            # right piece's redundant F and ∝ get absorbed into the center
+            FadeOut(prop_eq[0],
+                    shift=combined_eq[0].get_center() - prop_eq[0].get_center(),
+                    scale=0.7),
+            FadeOut(prop_eq[1],
+                    shift=combined_eq[1].get_center() - prop_eq[1].get_center(),
+                    scale=0.7),
+            # multiplication dot pops in between m and a
+            FadeIn(combined_eq[3], scale=0.4),
+            # boxes merge into one unified box
+            FadeOut(eq_box_m, scale=0.9),
+            FadeOut(eq_box, scale=0.9),
+            FadeIn(combined_box, scale=0.9),
+            # title fades up and away
+            FadeOut(title, shift=UP * 0.2),
+            run_time=1.5,
+            rate_func=rate_functions.ease_in_out_cubic
+        )
+
+        self.wait()
