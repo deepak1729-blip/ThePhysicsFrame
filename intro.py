@@ -143,162 +143,128 @@ class Channelintro(Scene):
         text.set_opacity(0) 
 
         # ==========================================
-        # --- CUSTOM RATE FUNCTIONS ---
-        # ==========================================
-        
-        # Apple-style spring: fast attack, gentle overshoot, smooth settle
-        def apple_spring(t):
-            # Critically damped spring with slight overshoot
-            if t >= 1:
-                return 1
-            return 1 - np.exp(-6 * t) * np.cos(2.5 * t)
-
-        # Dramatic deceleration — fast snap then ultra-slow glide to rest
-        def cinematic_decel(t):
-            return 1 - (1 - t) ** 5
-
-        # Smooth anticipation: tiny pull-back before launching forward
-        def anticipate_overshoot(t):
-            c1 = 1.70158
-            c3 = c1 + 1
-            return 1 + c3 * ((t - 1) ** 3) + c1 * ((t - 1) ** 2)
-        
-        # Gentle breathe pulse for the flare (sine-based, peaks at center)
-        def breathe_pulse(t):
-            return 0.5 * (1 - np.cos(2 * PI * t))
-
-        # ==========================================
         # --- 7. ANIMATION SEQUENCE ---
         # ==========================================
-        
+
         self.add(cloak)
 
-        # --- Beat 0: A moment of darkness (builds anticipation) ---
-        self.wait(0.4)
+        # --- Beat 0: Silence — let the viewer settle ---
+        self.wait(0.25)
 
-        # --- Beat 1: The Squircle Arrival ---
-        # Start from scaled up AND slightly rotated for a more dramatic entrance
+        # --- Beat 1: Squircle — arrives from large, decelerates smoothly to rest ---
         squircle_box.save_state()
-        squircle_box.scale(12)
-        squircle_box.set_opacity(0) 
-        
-        # Two-phase arrival: fast slam-in, then a subtle settle scale
+        squircle_box.scale(5.5)
+        squircle_box.set_opacity(0)
+
         self.play(
-            squircle_box.animate.restore(), 
-            run_time=1.2, 
-            rate_func=apple_spring
-        )
-        
-        # Micro-settle: the squircle "breathes" into place (barely perceptible overshoot)
-        self.play(
-            squircle_box.animate.scale(1.015),
-            run_time=0.2,
-            rate_func=rate_functions.ease_out_sine
-        )
-        self.play(
-            squircle_box.animate.scale(1 / 1.015),
-            run_time=0.25,
-            rate_func=rate_functions.ease_in_out_sine
+            squircle_box.animate.restore(),
+            run_time=1.4
         )
 
-        # --- Tiny beat before the swoosh (Apple loves these pauses) ---
-        self.wait(0.15)
+        self.wait(0.25)
 
-        # --- Beat 2: The Swoosh & Cutout ---
-        # Slower, more deliberate draw with exponential deceleration
-        # The swoosh should feel like it's being "written" with a confident hand
+        # --- Beat 2: Swoosh draw — unhurried, like a confident pen stroke ---
         self.play(
             Create(buff_mask, lag_ratio=1),
             Create(swoosh, lag_ratio=1),
-            run_time=1.3,
-            rate_func=cinematic_decel
-        )
-
-        # --- Beat 3: The Flare Pop ---
-        # Two-stage flare: fast scale-in with overshoot, then a lingering glow pulse
-        
-        # Stage A: The pop — snappy with a spring overshoot
-        self.play(
-            FadeIn(flare, scale=0.15), 
-            run_time=0.45,
-            rate_func=anticipate_overshoot
-        )
-        
-        # Stage B: A single mesmerising "breathe" — the flare gently pulses once
-        # This is the moment that makes people go "ooh"
-        self.play(
-            flare.animate.scale(1.25),
-            rate_func=rate_functions.ease_out_sine,
-            run_time=0.35
-        )
-        self.play(
-            flare.animate.scale(1 / 1.25),
-            rate_func=rate_functions.ease_in_out_sine,
-            run_time=0.45
-        )
-
-        # --- Breath before the reveal ---
-        self.wait(0.25)
-
-        # Make text fully opaque right before it slides (safely hidden)
-        text.set_opacity(1)
-
-        # --- Beat 4: The Grand Reveal ---
-        # Logo slides left, text emerges from behind — the hero moment
-        # Using a custom ease that starts slow (anticipation), accelerates, then
-        # decelerates gracefully into position
-        self.play(
-            logo_group.animate.move_to(final_logo_pos),
-            cloak.animate.shift(final_logo_pos),
-            text.animate.move_to(final_text_pos),
-            run_time=1.8,
             rate_func=rate_functions.ease_out_expo
         )
 
-        # --- Beat 4b: Text settle — each word gets a staggered micro-scale pulse ---
-        # Like each word "lands" with weight, left to right
+        # --- Beat 3: Flare — quiet, clean appearance ---
         self.play(
-            LaggedStart(
-                Succession(
-                    text[0].animate(run_time=0.12, rate_func=rate_functions.ease_out_sine).scale(1.03),
-                    text[0].animate(run_time=0.18, rate_func=rate_functions.ease_in_out_sine).scale(1/1.03),
-                ),
-                Succession(
-                    text[1].animate(run_time=0.12, rate_func=rate_functions.ease_out_sine).scale(1.03),
-                    text[1].animate(run_time=0.18, rate_func=rate_functions.ease_in_out_sine).scale(1/1.03),
-                ),
-                Succession(
-                    text[2].animate(run_time=0.12, rate_func=rate_functions.ease_out_sine).scale(1.03),
-                    text[2].animate(run_time=0.18, rate_func=rate_functions.ease_in_out_sine).scale(1/1.03),
-                ),
-                lag_ratio=0.15,
-            ),
-            run_time=0.8
+            FadeIn(flare),
+            run_time=0.5,
+            rate_func=rate_functions.ease_out_sine
         )
 
-        # --- Breath before tagline ---
-        self.wait(0.35)
+        # --- Beat 4: The Grand Reveal — logo glides left, title emerges ---
+        text.set_opacity(1)
 
-        # --- Beat 5: The Bottom Text ---
-        # Each word fades in from below with a staggered, decelerating slide
-        # Longer lag_ratio for a more deliberate, considered rhythm
-        
-        # Prepare: start each word slightly scaled down for a subtle "grow into place" feel
+        # --- Beat 5: Tagline — staggered fade-in with gentle upward drift ---
         for word in text2:
             word.save_state()
-            word.shift(DOWN * 0.3)
+            word.shift(DOWN * 0.18)
             word.set_opacity(0)
-            word.scale(0.92)
 
         self.play(
             LaggedStart(
                 text2[0].animate(rate_func=rate_functions.ease_out_expo).restore(),
                 text2[1].animate(rate_func=rate_functions.ease_out_expo).restore(),
                 text2[2].animate(rate_func=rate_functions.ease_out_expo).restore(),
-                lag_ratio=0.35,
-            ),
-            run_time=2.2,
+                lag_ratio=0.5,
+            ),logo_group.animate.move_to(final_logo_pos),
+            cloak.animate.shift(final_logo_pos),
+            text.animate.move_to(final_text_pos),
+            run_time=2.0
         )
-        
-        # Hold the final frame
-        self.wait(1.5)
+
+        # Hold the final frame briefly before the dissolve
+        self.wait()
+
+        # # --- Beat 6: Dissolve everything into minute particles ---
+        # rng = np.random.default_rng(7)
+
+        # particle_dots = []
+        # rest_positions = []
+        # velocities = []
+
+        # for source in [squircle_box, swoosh, flare, text, text2]:
+        #     for vm in source.family_members_with_points():
+        #         if not isinstance(vm, VMobject) or vm.get_num_points() == 0:
+        #             continue
+        #         if vm.get_stroke_opacity() > 0.1 and vm.get_stroke_width() > 0.01:
+        #             color = vm.get_stroke_color()
+        #         elif vm.get_fill_opacity() > 0.05:
+        #             color = vm.get_fill_color()
+        #         else:
+        #             continue
+
+        #         try:
+        #             length = vm.get_arc_length()
+        #         except Exception:
+        #             length = 0.05
+        #         n = int(np.clip(length * 55, 6, 140))
+
+        #         for _ in range(n):
+        #             p = vm.point_from_proportion(rng.random())
+        #             p = p + np.array([rng.normal(0, 0.008), rng.normal(0, 0.008), 0])
+        #             dot = Dot(point=p, radius=0.01, color=color,
+        #                       fill_opacity=0, stroke_width=0)
+        #             particle_dots.append(dot)
+        #             rest_positions.append(p.copy())
+        #             angle = rng.uniform(0, TAU)
+        #             speed = rng.uniform(0.25, 1.1)
+        #             velocities.append(np.array([
+        #                 np.cos(angle) * speed,
+        #                 np.sin(angle) * speed + rng.uniform(0.05, 0.3),
+        #                 0,
+        #             ]))
+
+        # particles = VGroup(*particle_dots)
+        # rest_positions = np.array(rest_positions)
+        # velocities = np.array(velocities)
+
+        # t_tracker = ValueTracker(0)
+
+        # def update_particles(group):
+        #     t = t_tracker.get_value()
+        #     fade = (t / 0.15) if t < 0.15 else max(0.0, 1 - (t - 0.15) / 0.85)
+        #     drift = t ** 1.4
+        #     for i, d in enumerate(group):
+        #         d.move_to(rest_positions[i] + velocities[i] * drift)
+        #         d.set_opacity(fade)
+
+        # particles.add_updater(update_particles)
+        # self.add(particles)
+
+        self.play(
+            FadeOut(
+                VGroup(logo_group, text, text2),
+            )
+            # t_tracker.animate.set_value(1.0),
+            # run_time=2.4,
+            # rate_func=linear,
+        )
+
+        # particles.remove_updater(update_particles)
+        self.wait()
