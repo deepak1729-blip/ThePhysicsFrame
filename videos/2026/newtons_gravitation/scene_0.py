@@ -77,17 +77,18 @@ def check_mark(color=COLOR_GROUND, scale=0.5):
 def build_formula(fs=60):
     """F = GMm/r² assembled from individually addressable glyphs.
     Returns a VGroup with named handles so every act can grab single symbols."""
-    F   = MathTex("F", font_size=fs, color=COLOR_WHITE)
-    eq  = MathTex("=", font_size=fs, color=COLOR_WHITE)
-    G   = MathTex("G", font_size=fs, color=COLOR_WHITE)
-    M   = MathTex("M", font_size=fs, color=COLOR_WHITE)
-    mm  = MathTex("m", font_size=fs, color=COLOR_WHITE)
-    r   = MathTex("r", font_size=fs, color=COLOR_WHITE)
-    exp = MathTex("2", font_size=int(fs * 0.6), color=COLOR_WHITE)
+    F    = MathTex("F", font_size=fs, color=COLOR_WHITE)
+    eq   = MathTex("=", font_size=fs, color=COLOR_WHITE)
+    G    = MathTex("G", font_size=fs, color=COLOR_WHITE)
+    M    = MathTex("M", font_size=fs, color=COLOR_WHITE)
+    mm   = MathTex("m", font_size=fs, color=COLOR_WHITE)
+    r2   = MathTex(r"r^2", font_size=fs, color=COLOR_WHITE)
+    # expose sub-glyphs: [0][0] = r, [0][1] = 2
+    r    = r2[0][0]
+    exp  = r2[0][1]
 
     num = VGroup(G, M, mm).arrange(RIGHT, buff=0.10)
-    exp.next_to(r, UR, buff=0.0).shift(DOWN * 0.04 + LEFT * 0.02)
-    den = VGroup(r, exp)
+    den = r2
 
     bar_w = max(num.width, den.width) + 0.28
     bar = Line(LEFT * bar_w / 2, RIGHT * bar_w / 2, stroke_width=3, color=COLOR_WHITE)
@@ -100,9 +101,11 @@ def build_formula(fs=60):
     whole.F, whole.eq, whole.G, whole.M, whole.m = F, eq, G, M, mm
     whole.r, whole.exp, whole.bar = r, exp, bar
     whole.num, whole.den, whole.frac = num, den, frac
+    # keep r2 as handle so Act 2 can animate the full r^2 term
+    whole.r2 = r2
     return whole
 
-class Scene1_GravitationColdOpen(MovingCameraScene):
+class Scene0_GravitationColdOpen(MovingCameraScene):
 
     # fixed bands — every act reads from these, so nothing free-floats
     STRIP_Y = UP * 3.0          # the mystery-strip spine
@@ -143,10 +146,14 @@ class Scene1_GravitationColdOpen(MovingCameraScene):
             MathTex(r"200",                font_size=34, color=COLOR_GROUND).next_to(formula.m, UR, buff=0.55),
             MathTex(r"7.0\times10^{6}",    font_size=34, color=COLOR_GROUND).next_to(formula.den, DOWN, buff=0.45),
         ).set_z_index(5)
+        srcs = [formula.G, formula.M, formula.m, formula.den]
+        # top three tags sit above their symbols; bottom tag sits below den
+        src_anchors = [s.get_top() for s in srcs[:3]] + [srcs[3].get_bottom()]
+        tag_anchors = [t.get_bottom() for t in tags[:3]] + [tags[3].get_top()]
         connectors = VGroup(*[
-            DashedLine(src.get_bottom(), tag.get_top(), color=COLOR_GROUND,
+            DashedLine(sa, ta, color=COLOR_GROUND,
                        stroke_width=1.2, stroke_opacity=0.4, dash_length=0.06)
-            for src, tag in zip([formula.G, formula.M, formula.m, formula.den], tags)
+            for sa, ta in zip(src_anchors, tag_anchors)
         ])
         self.play(
             LaggedStart(*[FadeIn(t, shift=DOWN * 0.18) for t in tags],
@@ -224,25 +231,22 @@ class Scene1_GravitationColdOpen(MovingCameraScene):
         )
         self.wait(0.4)
 
-        # Transform 2 into 3
-        exp_3 = MathTex("3", font_size=int(56 * 0.6), color=COLOR_R)
-        exp_3.move_to(formula.exp).match_height(formula.exp)
-        
-        self.play(Transform(formula.exp, exp_3), run_time=0.3)
+        # Swap r^2 → r^3
+        den_3 = MathTex(r"r^3", font_size=60, color=COLOR_R).scale(1.4)
+        den_3.next_to(formula.bar, DOWN, buff=0.12)
+        self.play(Transform(formula.den, den_3), run_time=0.3)
         self.wait(0.5)
-        
-        # Transform to simple r (hide exponent)
-        self.play(formula.exp.animate.set_opacity(0), run_time=0.3)
+
+        # Swap r^3 → r (no exponent)
+        den_r = MathTex(r"r", font_size=60, color=COLOR_R).scale(1.4)
+        den_r.next_to(formula.bar, DOWN, buff=0.12)
+        self.play(Transform(formula.den, den_r), run_time=0.3)
         self.wait(0.5)
-        
-        # Transform back to 2
-        exp_2 = MathTex("2", font_size=int(56 * 0.6), color=COLOR_R)
-        exp_2.move_to(formula.exp).match_height(formula.exp)
-        
-        self.play(
-            formula.exp.animate.become(exp_2).set_opacity(1), 
-            run_time=0.3
-        )
+
+        # Swap r → r^2
+        den_2 = MathTex(r"r^2", font_size=60, color=COLOR_R).scale(1.4)
+        den_2.next_to(formula.bar, DOWN, buff=0.12)
+        self.play(Transform(formula.den, den_2), run_time=0.3)
         self.wait(0.4)
 
         self.play(
