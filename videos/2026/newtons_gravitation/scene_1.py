@@ -2,7 +2,7 @@ from manim import *
 import numpy as np
 
 # ----------------------------------------------------------------------------
-# Palette (centripetal-acceleration family; deep-space reads cleaner here)
+# Palette
 # ----------------------------------------------------------------------------
 COLOR_BG       = "#0E1117"
 COLOR_GROUND   = "#8E8E93"
@@ -70,22 +70,6 @@ def make_particle(color, radius=0.10):
                stroke_width=0)
     g.add(glow, core)
     return g
-
-
-def make_ball(color, radius=0.18):
-    """Shaded sphere: base disc + offset sheen + tiny specular highlight."""
-    base = Dot(ORIGIN, radius=radius, color=color, fill_opacity=1.0,
-               stroke_width=0)
-    sheen = Dot(radius=radius * 0.62, color=COLOR_WHITE, fill_opacity=0.18,
-                stroke_width=0).move_to(base.get_center()
-                                        + np.array([-radius * 0.32,
-                                                    radius * 0.32, 0]))
-    spec = Dot(radius=radius * 0.18, color=COLOR_WHITE, fill_opacity=0.9,
-               stroke_width=0).move_to(base.get_center()
-                                       + np.array([-radius * 0.38,
-                                                   radius * 0.40, 0]))
-    return VGroup(base, sheen, spec)
-
 
 # A single frozen irregular profile -> stable across stones (good for caching)
 _STONE_PROFILE = None
