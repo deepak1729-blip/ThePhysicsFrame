@@ -264,10 +264,7 @@ class Scene_6_DistanceAndTheSquare(MovingCameraScene):
 
     # ===================================================================== A2
     def act2_two_numbers(self):
-        # ── Clean, diagrammatic. Earth at left; the two numbers from the sky. ──
-        # We need long_line = 60 × r_line. r_line = 0.5 units → long_line = 30 units.
-        # The frame is ~14.2 wide, so scale everything down by 14.2/30 ≈ 0.43 with
-        # Earth pinned to the left edge, leaving a small margin.
+
         SCALE = 0.43
         R_LEN = 0.5                                 # r_line length before scaling
         LONG_LEN = 60 * R_LEN                      # = 30 units before scaling
