@@ -514,8 +514,8 @@ class Scene_7_KeplerToInverseSquare(MovingCameraScene):
         C = LEFT * 3.4 + DOWN * 0.2
         sun_k = make_sun(0.26).move_to(C).set_z_index(2)
         radii   = [0.85, 1.55, 2.45]
-        # Mercury (0), Venus (1), Mars (3) — inner to outer, matching PLANET_IMAGES indices
-        p_idx   = [0, 1, 3]
+        # Mercury (0), Venus (1), Earth (2) — inner to outer, matching PLANET_IMAGES indices
+        p_idx   = [0, 1, 2]
         p_sizes = [0.13, 0.16, 0.15]
         phase   = [0.4, 2.1, 4.0]
         w0 = 1.0
@@ -563,7 +563,7 @@ class Scene_7_KeplerToInverseSquare(MovingCameraScene):
                   run_time=0.7)
 
         # T² ∝ r³ ⇒ the points sit exactly on a straight line through the origin.
-        dot_cols = [COLOR_GROUND, COLOR_BLUE_BALL, COLOR_CORAL]  # Mercury / Venus / Mars
+        dot_cols = [COLOR_GROUND, COLOR_CORAL, COLOR_BLUE_BALL]  # Mercury / Venus / Earth
         fracs = [0.30, 0.58, 0.88]
         line_dir = (RIGHT * 3.0 + UP * 2.8)
         data = VGroup()
