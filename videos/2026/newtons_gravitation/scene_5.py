@@ -244,10 +244,10 @@ class Scene_5_WhyMultiply(MovingCameraScene):
         # Soft split: a faint seam, and the masses fly left to BECOME the formula.
         seam = DashedLine([0, 3.4, 0], [0, -3.4, 0], color=COLOR_WHITE,
                           stroke_opacity=0.12, dash_length=0.14)
-        L1_ref = MathTex("F", "=", "M", "+", "m",
+        L1_ref = MathTex("F", r"\propto", "M", "+", "m",
                          font_size=48).move_to(self.L_X * RIGHT + UP * 1.55)
         F1  = MathTex("F", color=COLOR_WHITE, font_size=48).move_to(L1_ref[0])
-        eq1 = MathTex("=", color=COLOR_WHITE, font_size=48).move_to(L1_ref[1])
+        eq1 = MathTex(r"\propto", color=COLOR_WHITE, font_size=48).move_to(L1_ref[1])
         self.play(
             Create(seam),
             big.animate.move_to([self.BIG_X, self.Y0, 0]),       # lift stones back
@@ -265,7 +265,7 @@ class Scene_5_WhyMultiply(MovingCameraScene):
 
         # a = F / m
         formA = VGroup(
-            MathTex("a", "=", color=COLOR_WHITE, font_size=46),
+            MathTex("a", r"\propto", color=COLOR_WHITE, font_size=46),
             frac(MathTex("F", color=COLOR_WHITE, font_size=46),
                  MathTex("m", color=COLOR_m, font_size=46)),
         ).arrange(RIGHT, buff=0.18).move_to(a_anchor)
@@ -277,7 +277,7 @@ class Scene_5_WhyMultiply(MovingCameraScene):
                       MathTex("+", color=COLOR_WHITE, font_size=46),
                       MathTex("m", color=COLOR_m, font_size=46)).arrange(RIGHT, buff=0.10)
         formB = VGroup(
-            MathTex("a", "=", color=COLOR_WHITE, font_size=46),
+            MathTex("a", r"\propto", color=COLOR_WHITE, font_size=46),
             frac(numB, MathTex("m", color=COLOR_m, font_size=46)),
         ).arrange(RIGHT, buff=0.18).move_to(a_anchor)
         self.play(ReplacementTransform(formA, formB), run_time=0.9)
@@ -286,7 +286,7 @@ class Scene_5_WhyMultiply(MovingCameraScene):
         # = M/m + 1   (built with an addressable denominator m)
         den_glyph = MathTex("m", color=COLOR_m, font_size=46)
         formC = VGroup(
-            MathTex("a", "=", color=COLOR_WHITE, font_size=46),
+            MathTex("a", r"\propto", color=COLOR_WHITE, font_size=46),
             frac(MathTex("M", color=COLOR_M, font_size=46), den_glyph),
             MathTex("+", "1", color=COLOR_WHITE, font_size=46),
         ).arrange(RIGHT, buff=0.18).move_to(a_anchor)
@@ -343,7 +343,7 @@ class Scene_5_WhyMultiply(MovingCameraScene):
         num = VGroup(M_num, dot_num, m_num).arrange(RIGHT, buff=0.10)
         m_den = MathTex("m", color=COLOR_m, font_size=46)
         formD = VGroup(
-            MathTex("a", "=", color=COLOR_WHITE, font_size=46),
+            MathTex("a", r"\propto", color=COLOR_WHITE, font_size=46),
             frac(num, m_den),
         ).arrange(RIGHT, buff=0.18).move_to(a_anchor)
         self.play(ReplacementTransform(formC, formD), run_time=0.9)
@@ -363,7 +363,7 @@ class Scene_5_WhyMultiply(MovingCameraScene):
         self.wait(0.3)
 
         # What remains: a = M, clean white, alone.
-        aM = MathTex("a", "=", "M", color=COLOR_WHITE, font_size=52).move_to(a_anchor)
+        aM = MathTex("a", r"\propto", "M", color=COLOR_WHITE, font_size=52).move_to(a_anchor)
         self.play(ReplacementTransform(VGroup(formD, sl_n, sl_d), aM), run_time=0.8,
                   rate_func=rate_functions.ease_in_out_cubic)
         self.play(aM.animate.scale(1.1), run_time=0.5,
@@ -391,9 +391,9 @@ class Scene_5_WhyMultiply(MovingCameraScene):
         self.e_dots = [make_unit(COLOR_M).move_to(p) for p in e_pts]
         self.a_dots = [make_unit(COLOR_m).move_to(p) for p in a_pts]
 
-        e_lab = Text("Earth", font=FONT, color=COLOR_M, font_size=24
+        e_lab = Text("Object A", font=FONT, color=COLOR_M, font_size=24
                      ).next_to(self.e_dots[0], DOWN, buff=0.35)
-        a_lab = Text("apple", font=FONT, color=COLOR_m, font_size=24
+        a_lab = Text("Object B", font=FONT, color=COLOR_m, font_size=24
                      ).next_to(self.a_dots[0], DOWN, buff=0.35)
         self.play(FadeIn(self.e_dots[0], scale=0.5), FadeIn(self.a_dots[0], scale=0.5),
                   FadeIn(e_lab, shift=UP * 0.1), FadeIn(a_lab, shift=UP * 0.1),
@@ -463,7 +463,7 @@ class Scene_5_WhyMultiply(MovingCameraScene):
             for f in (r"1\times1=1", r"1\times2=2", r"2\times2=4",
                       r"2\times3=6", r"3\times3=9")
         ]).arrange(DOWN, buff=0.26, aligned_edge=LEFT)
-        facts.to_edge(LEFT, buff=0.9).set_opacity(0.32)
+        facts.to_edge(LEFT, buff=0.9)
         facts[-1].set_color(COLOR_AMBER)   # the count we just built
         self.play(LaggedStart(*[FadeIn(f, shift=RIGHT * 0.1) for f in facts],
                               lag_ratio=0.12), run_time=1.4)
@@ -518,8 +518,6 @@ class Scene_5_WhyMultiply(MovingCameraScene):
             drifts.append(node.animate.shift(v).set_opacity(0.0))
         self.play(LaggedStart(*drifts, lag_ratio=0.04),
                   run_time=2.2, rate_func=rate_functions.ease_in_sine)
-        self.play(law.animate.set_opacity(0.0), self.grid.animate.set_opacity(0.0),
-                  run_time=1.2)
         self.wait(0.5)
 
     # ═══════════════════════════════════════════════════════════ INTERNALS
