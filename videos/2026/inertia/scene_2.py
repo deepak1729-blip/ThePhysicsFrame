@@ -1,731 +1,638 @@
+"""
+THE PHYSICS FRAME — SCENE 2 · GALILEO'S RAMPS
+=============================================
+
+PHYSICS HONESTY (series principle)
+  The ball's motion is NOT driven by easing curves. Its speed at every point
+  comes from energy conservation:  v(s) = sqrt( 2 g [ (y0 - y(s)) - mu * X(s) ] )
+  where y0 is the release height, y(s) the current height, X(s) the horizontal
+  distance covered, and mu the friction coefficient. Friction work = mu*m*g*X
+  (kinetic friction over horizontal travel) is what makes the first run fall
+  "just short" by exactly the right amount. On the flat floor a = 0, so the
+  motion is genuinely constant-velocity (the only place `linear` is allowed).
+
+TUNING KNOBS (eyeball after first render): G, TROUGH_X, R, the THETA_* angles,
+RUN_TIME values, and the Act-4 camera zoom. Geometry is fully parametric.
+
+Optional grounding overlays (halfpipe / air-hockey) are OFF by default; flip
+USE_OVERLAYS to True and drop the named stills in beside this file.
+"""
+
 from manim import *
 import numpy as np
 import math
 
-# ── CORE PALETTE (project canvas) ──
-VOID      = "#0A0C10"   # base background — every scene
+# ─────────────────────────────────────────────────────────────────────────
+#  OBSERVATORY PALETTE  (verbatim from the series design system)
+# ─────────────────────────────────────────────────────────────────────────
+VOID      = "#0A0C10"   # base background
 PANEL     = "#11151C"   # lifted surfaces
-STARLIGHT = "#E8E6DF"   # primary text / default stroke / the ball
-DUST      = "#9A958C"   # secondary text, metadata, dimmed state
-AMBER     = "#D98A3D"   # the single focus accent
-CYAN      = "#5B8FB0"   # secondary accent, sparing
-SPEC      = "#F6F4EE"   # ball specular highlight
+STARLIGHT = "#E8E6DF"   # primary text / the ball-as-character
+DUST      = "#9A958C"   # secondary · metadata · the dimmed state
+AMBER     = "#D98A3D"   # primary accent · focus  (THE LINE = the goal)
+CYAN      = "#5B8FB0"   # secondary · sparing
 
-# ── QUANTITY PIGMENTS (held for the whole video) ──
-VEL    = "#57C08A"   # velocity v
-FORCE  = "#E06450"   # force F  (the nudge / the stop-tap)
-GROUND = "#7F8A99"   # the ground / the ramp apparatus
+# quantity pigments
+C_GROUND  = "#7F8A99"   # ground / reference axis (the apparatus)
+C_FORCE   = "#E06450"   # force pigment — used once, for the friction deficit
+C_VEL     = "#57C08A"   # velocity — one quiet cameo
 
-FONT_SERIF = "Spectral"
-FONT_MONO  = "Space Mono"
+SERIF = "Spectral"      # ideas; italic is the channel's speaking voice
+MONO  = "Space Mono"    # labels & metadata only
 
 config.background_color = VOID
 
-# ── SCENE GEOMETRY (one source of truth) ──
-VALLEY_Y = -2.55          # surface y at the valley vertex V
-HEIGHT_Y = 0.55           # ball-CENTRE release height  →  the dashed line
-R_BALL   = 0.26
-R_FILLET = 0.85           # smooth valley fillet radius
-AL_DEG   = 56             # left ramp angle (fixed — the constant side)
-FLAT_LEN = 7.5            # how far the flat floor runs before perspective
-GRAV     = 6.0            # gravity scale (tunes run feel)
-SIM_DT   = 1 / 60
-V_FLOOR  = 0.12           # tiny minimum speed so a run gets going / finishes
-MAXSTEPS = 1500
-
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  BACKDROP & CHARACTER
+#  CONSTRUCTION VOCABULARY  (carried over / extended from Scene 1)
 # ═══════════════════════════════════════════════════════════════════════════
-def build_backdrop():
-    """A barely-there dust grid — texture without clutter (near-empty frame)."""
-    grid = VGroup()
-    max_x, max_y, spacing = 14, 8, 0.7
-
-    def fading_line(start, end, peak):
-        segs = VGroup()
-        vec = end - start
-        N = 26
-        for i in range(N):
-            p1 = start + vec * (i / N)
-            p2 = start + vec * ((i + 1) / N)
-            t = (i + 0.5) / N
-            op = peak * (1 - (2 * t - 1) ** 2)
-            segs.add(Line(p1, p2, stroke_color=DUST, stroke_width=1,
-                          stroke_opacity=op))
-        return segs
-
-    for x in np.arange(-max_x, max_x + 0.1, spacing):
-        peak = 0.05 * (1 - (abs(x) / max_x) ** 1.5)
-        if peak > 0:
-            grid.add(fading_line(UP * max_y + RIGHT * x,
-                                 DOWN * max_y + RIGHT * x, peak))
-    for y in np.arange(-max_y, max_y + 0.1, spacing):
-        peak = 0.05 * (1 - (abs(y) / max_y) ** 1.5)
-        if peak > 0:
-            grid.add(fading_line(LEFT * max_x + UP * y,
-                                 RIGHT * max_x + UP * y, peak))
-    return grid
-
-
-def make_ball(radius=R_BALL, color=STARLIGHT):
-    """The recurring character: soft halo + sheen + specular. Reused all scene."""
-    g = VGroup()
-    halo = Circle(radius=radius * 1.7, stroke_width=0)
-    halo.set_fill(color, opacity=0.05)
-    core = Circle(radius=radius)
-    core.set_fill(color, opacity=1.0)
-    core.set_sheen(-0.5, DR)
-    core.set_stroke(DUST, width=1.1, opacity=0.35)
-    rim = Circle(radius=radius)
-    rim.set_fill(opacity=0)
-    rim.set_stroke(color, width=2.2, opacity=0.5)
-    spec = Ellipse(width=radius * 0.5, height=radius * 0.32)
-    spec.set_fill(SPEC, opacity=0.7)
-    spec.set_stroke(width=0)
-    spec.move_to(np.array([-radius * 0.30, radius * 0.32, 0]))
-    spec.rotate(-20 * DEGREES)
-    g.add(halo, core, rim, spec)
+def corner_L(orientation, size=0.20, color=AMBER, width=1.4, opacity=0.7):
+    """Registration corner — the Observatory mark that frames the animation."""
+    sx = -1 if orientation[0] > 0 else 1
+    sy = -1 if orientation[1] > 0 else 1
+    h = Line(ORIGIN, RIGHT * size * sx, stroke_color=color,
+             stroke_width=width, stroke_opacity=opacity)
+    v = Line(ORIGIN, UP * size * sy, stroke_color=color,
+             stroke_width=width, stroke_opacity=opacity)
+    g = VGroup(h, v)
+    g.anchor = orientation
     return g
 
 
-def contact_shadow(radius=R_BALL):
-    sh = Ellipse(width=radius * 2.1, height=radius * 0.55, stroke_width=0)
-    sh.set_fill(BLACK, opacity=0.32)
-    return sh
+def make_ball(color, radius=0.17):
+    """Top-down ball: base disc + sheen + specular (series shading vocabulary).
+    Exposes `.disc` (the base sphere, used as the trail anchor) and `.radius`."""
+    g = VGroup()
+    sphere = Circle(radius=radius)
+    sphere.set_fill(color, opacity=1.0)
+    sphere.set_sheen(-0.40, DR)
+    sphere.set_stroke(color=STARLIGHT, width=1.4, opacity=0.18)
+    g.add(sphere)
+    rim = Circle(radius=radius)
+    rim.set_fill(opacity=0)
+    rim.set_stroke(color=color, width=2.6, opacity=0.45)
+    g.add(rim)
+    spec = Ellipse(width=radius * 0.50, height=radius * 0.32)
+    spec.set_fill(STARLIGHT, opacity=0.62)
+    spec.set_stroke(width=0)
+    spec.move_to(np.array([-radius * 0.28, radius * 0.30, 0]))
+    spec.rotate(-20 * DEGREES)
+    g.add(spec)
+    g.disc = sphere
+    g.radius = radius
+    return g
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  RAMP GEOMETRY  (left ramp fixed; right ramp angle = the variable)
-# ═══════════════════════════════════════════════════════════════════════════
-def ramp_geometry(aR_deg):
-    aL = math.radians(AL_DEG)
-    aR = math.radians(aR_deg)
-    V = np.array([0.0, VALLEY_Y, 0.0])
-    dirL = np.array([-math.cos(aL), math.sin(aL), 0.0])   # up the left ramp
-    dirR = np.array([math.cos(aR),  math.sin(aR), 0.0])   # up the right ramp
-    nL = np.array([math.sin(aL),  math.cos(aL), 0.0])     # outward normal (left)
-    nR = np.array([-math.sin(aR), math.cos(aR), 0.0])     # outward normal (right)
+class Scene2_GalileosRamps(MovingCameraScene):
 
-    bis = dirL + dirR
-    bis = bis / np.linalg.norm(bis)
-    beta = math.acos(max(-1.0, min(1.0, float(np.dot(dirL, dirR)))))
-    Cf = V + bis * (R_FILLET / math.sin(beta / 2))
-    tL = V + dirL * float(np.dot(Cf - V, dirL))
-    tR = V + dirR * float(np.dot(Cf - V, dirR))
+    # ── locked geometry (every act reads from these) ──────────────────────
+    G        = 11.0          # gravity in scene-units/s^2 (paces the runs)
+    TROUGH_X = -2.40         # x of the valley centre
+    GROUND_Y = -2.55         # the ground line / flat-floor height
+    R        = 0.95          # trough radius (the rounded valley bottom)
+    LINE_Y   =  0.60         # release height -> THE dashed reference line
+    THETA_L  = 60            # fixed left-ramp angle (degrees)
+    BALL_R   = 0.17
 
-    sL = (HEIGHT_Y - VALLEY_Y - R_BALL * math.cos(aL)) / math.sin(aL)
-    L_top = V + dirL * sL
+    # the right-ramp angle for each release, in order (degrees). 0 == flat.
+    THETA_RUN_IDEAL = 50     # Act 2 ideal touch
+    THETA_RUN_A3    = 34     # Act 3 gentler
+    THETA_RUN_A4    = [25, 17, 11]   # Act 4 cadence (gentler, gentler, gentler)
 
-    if aR_deg > 0.5:
-        sR = (HEIGHT_Y - VALLEY_Y - R_BALL * math.cos(aR)) / math.sin(aR)
-        R_top = V + dirR * sR
-        reaches = True
-    else:
-        R_top = V + dirR * FLAT_LEN
-        reaches = False
-
-    return dict(V=V, dirL=dirL, dirR=dirR, nL=nL, nR=nR, Cf=Cf,
-                tL=tL, tR=tR, L_top=L_top, R_top=R_top, reaches=reaches)
-
-
-def _arc_samples(center, p_start, p_end, n):
-    a0 = math.atan2((p_start - center)[1], (p_start - center)[0])
-    a1 = math.atan2((p_end - center)[1], (p_end - center)[0])
-    d = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi          # short sweep
-    r = float(np.linalg.norm(p_start - center))
-    return [center + r * np.array([math.cos(a0 + d * t),
-                                   math.sin(a0 + d * t), 0.0])
-            for t in np.linspace(0, 1, n)]
-
-
-def surface_group(aR_deg):
-    """The drawn ramp surface (ground pigment) + a faint under-glow."""
-    g = ramp_geometry(aR_deg)
-    pts = [g["L_top"], g["tL"]]
-    pts += _arc_samples(g["Cf"], g["tL"], g["tR"], 28)[1:-1]
-    pts += [g["tR"], g["R_top"]]
-    line = VMobject(stroke_color=GROUND, stroke_width=3.4)
-    line.set_points_as_corners(pts)
-    glow = VMobject(stroke_color=GROUND, stroke_width=9, stroke_opacity=0.07)
-    glow.set_points_as_corners(pts)
-    return VGroup(glow, line)
-
-
-def center_path(aR_deg):
-    """Dense ball-CENTRE positions from release (left) to far end (right)."""
-    g = ramp_geometry(aR_deg)
-    L_top, tL, tR, R_top = g["L_top"], g["tL"], g["tR"], g["R_top"]
-    nL, nR, Cf = g["nL"], g["nR"], g["Cf"]
-
-    def lin(a, b, n):
-        return [a + (b - a) * t for t in np.linspace(0, 1, max(n, 2))]
-
-    n_left = int(np.linalg.norm(tL - L_top) / 0.045) + 2
-    n_arc = 26
-    n_right = int(np.linalg.norm(R_top - tR) / 0.045) + 2
-
-    left_c = [p + R_BALL * nL for p in lin(L_top, tL, n_left)]
-    arc_c = [p + R_BALL * (Cf - p) / np.linalg.norm(Cf - p)
-             for p in _arc_samples(Cf, tL, tR, n_arc)]
-    right_c = [p + R_BALL * nR for p in lin(tR, R_top, n_right)]
-    return left_c + arc_c[1:-1] + right_c
-
-
-def simulate(pts):
-    """Energy-honest trajectory: v = sqrt(2g·drop) integrated along the path."""
-    P = [np.array(p) for p in pts]
-    HY = P[0][1]
-    seg = [float(np.linalg.norm(P[i + 1] - P[i])) for i in range(len(P) - 1)]
-    cum = [0.0]
-    for s in seg:
-        cum.append(cum[-1] + s)
-    total = cum[-1]
-
-    def point_at(s):
-        s = min(max(s, 0.0), total)
-        lo, hi = 0, len(cum) - 1
-        while lo < hi - 1:
-            mid = (lo + hi) // 2
-            if cum[mid] <= s:
-                lo = mid
-            else:
-                hi = mid
-        f = (s - cum[lo]) / max(seg[lo], 1e-9)
-        return P[lo] * (1 - f) + P[lo + 1] * f
-
-    out = [P[0]]
-    s = 0.0
-    for _ in range(MAXSTEPS):
-        y = point_at(s)[1]
-        v = math.sqrt(max(2 * GRAV * (HY - y), 0.0))
-        v = max(v, V_FLOOR)
-        s += v * SIM_DT
-        out.append(point_at(s))
-        if s >= total:
-            break
-    out.append(P[-1])
-    return out
-
-
-def subsample(pts, n=90):
-    if len(pts) <= n:
-        return pts
-    idx = np.linspace(0, len(pts) - 1, n).astype(int)
-    return [pts[i] for i in idx]
-
-
-# convenient constants derived from the fixed left ramp
-_REL = ramp_geometry(56)
-RELEASE_CENTER = _REL["L_top"] + R_BALL * _REL["nL"]
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-class Scene2_WhatStopsIt(MovingCameraScene):
+    NL, NA, NR = 26, 44, 60  # fixed sample counts -> 1:1 track morphs
 
     def construct(self):
+        self.A = np.array([self.TROUGH_X, self.GROUND_Y + self.R, 0.0])  # trough centre
         self.camera.frame.save_state()
-        self.backdrop = build_backdrop().set_z_index(-20)
-        self.add(self.backdrop)
+        self.ghosts = VGroup()        # accumulating fan of past runs
+        self.summit_ticks = VGroup()
 
-        self.aR = ValueTracker(56)          # the variable: right-ramp angle
-        self.ghosts = VGroup().set_z_index(1)   # accumulating arcs (Act 4)
-        self.landing_dots = VGroup().set_z_index(2)
+        # Observatory frame marks, pinned to the camera so they survive zooms.
+        self.frame_marks = VGroup(*[corner_L(o, opacity=0.0)
+                                    for o in (UL, UR, DL, DR)])
+        self._pin_frame_marks()
 
-        self.act1_the_question()
-        self.act2_same_height()
-        self.act3_gentle_the_slope()
-        self.act4_gentler()
+        self.act1_assemble_and_flip()
+        self.act2_anchor_and_almost()
+        self.act3_gentler()
+        self.act4_cadence()
         self.act5_flat_forever()
-        self.act6_the_flip()
+        self.act6_reframe()
+        self.act7_lazy()
 
-    # ── shared run helper: play a pre-simulated trajectory, honestly ──
-    def run_ball(self, ball, positions, run_time, trail=True,
-                 trail_color=STARLIGHT, stop_index=None):
-        N = len(positions)
-        end = (stop_index if stop_index is not None else N - 1)
-        idx = ValueTracker(0)
-        ball.add_updater(
-            lambda m: m.move_to(positions[int(np.clip(idx.get_value(), 0, N - 1))]))
-        tr = None
-        if trail:
-            tr = TracedPath(ball.get_center, stroke_color=trail_color,
-                            stroke_width=3, dissipating_time=0.5)
-            tr.set_stroke(opacity=0.5)
-            tr.set_z_index(ball.z_index - 1)
-            self.add(tr)
-        self.play(idx.animate.set_value(end), run_time=run_time,
-                  rate_func=linear)
-        ball.clear_updaters()
-        return tr
+    # ── frame-mark plumbing ───────────────────────────────────────────────
+    def _pin_frame_marks(self):
+        inset = 0.34
 
-    # ===================================================================== A1
-    def act1_the_question(self):
-        # Cold open: a single faint floor line, low and centred.
-        floor = Line([-4.4, VALLEY_Y, 0], [4.4, VALLEY_Y, 0],
-                     color=GROUND, stroke_width=3.0, stroke_opacity=0.85)
-        self.play(Create(floor), run_time=0.9,
-                  rate_func=rate_functions.ease_in_out_sine)
-        self.wait(0.3)
+        def updater(grp):
+            f = self.camera.frame
+            scl = f.get_width() / config.frame_width
+            for c in grp:
+                o = c.anchor
+                c.set(width=0.40 * scl, height=0.40 * scl)
+                c.move_to(f.get_corner(o) - o * inset * scl, aligned_edge=o)
+        self.frame_marks.add_updater(updater)
 
-        # A small abstract block slides in from the left and DECELERATES.
-        block = RoundedRectangle(width=0.5, height=0.5, corner_radius=0.08,
-                                 stroke_color=STARLIGHT, stroke_width=2.2,
-                                 fill_color=PANEL, fill_opacity=1.0)
-        block.move_to([-6.3, VALLEY_Y + 0.25, 0]).set_z_index(5)
-        sh = contact_shadow(0.25).move_to([-6.3, VALLEY_Y - 0.02, 0]).set_z_index(4)
-        sh.add_updater(lambda m: m.move_to([block.get_center()[0],
-                                            VALLEY_Y - 0.02, 0]))
-        self.add(sh)
-        self.play(block.animate.move_to([-1.4, VALLEY_Y + 0.25, 0]),
-                  run_time=1.6, rate_func=rate_functions.ease_out_cubic)
-        sh.clear_updaters()
-        self.wait(0.4)
+    # ═══════════════════════════════════════════════ geometry / physics ═══
+    def _tangent_left(self):
+        t = math.radians(self.THETA_L)
+        return self.A + self.R * np.array([-math.sin(t), -math.cos(t), 0])
 
-        # The question writes above it.
-        q = Text("What actually stops it?", font=FONT_SERIF, font_size=38,
-                 weight="LIGHT", color=STARLIGHT)
-        q.move_to([0, 1.7, 0]).set_z_index(8)
-        self.play(Write(q), run_time=1.1)
-        self.wait(0.9)
+    def _tangent_right(self, theta_deg):
+        t = math.radians(theta_deg)
+        return self.A + self.R * np.array([math.sin(t), -math.cos(t), 0])
 
-        # METHOD BEAT — don't cut, TRANSFORM: the floor bends & extrudes up at
-        # both ends into the U-shaped ramp track. Apparatus replaces object.
-        # >>> EDIT: optional Galileo-ramp cutaway lands right here.
-        target = surface_group(56).set_z_index(3)
-        self.play(
-            ReplacementTransform(floor, target[1]),
-            FadeIn(target[0]),
-            FadeOut(block, scale=0.6),
-            FadeOut(sh),
-            q.animate.set_opacity(0.0).shift(UP * 0.2),
-            run_time=1.5, rate_func=rate_functions.ease_in_out_cubic,
-        )
-        self.remove(q, target)
+    def _top_left(self):
+        t = math.radians(self.THETA_L)
+        P = self._tangent_left()
+        s = (self.LINE_Y - P[1]) / math.sin(t)
+        return P + s * np.array([-math.cos(t), math.sin(t), 0])
 
-        # Hand the static target over to the LIVE, angle-driven surface.
-        self.surface = always_redraw(lambda: surface_group(self.aR.get_value()))
-        self.surface.set_z_index(3)
-        self.add(self.surface)
-        self.wait(0.6)
+    def _top_right(self, theta_deg):
+        t = math.radians(theta_deg)
+        P = self._tangent_right(theta_deg)
+        s = (self.LINE_Y - P[1]) / math.sin(t)
+        return P + s * np.array([math.cos(t), math.sin(t), 0])
 
-    # ===================================================================== A2
-    def act2_same_height(self):
-        # The ball appears at the top of the LEFT ramp.
-        ball = make_ball().move_to(RELEASE_CENTER).set_z_index(5)
-        self.ball = ball
-        self.play(FadeIn(ball, scale=0.7), run_time=0.6,
-                  rate_func=rate_functions.ease_out_cubic)
-        self.wait(0.3)
+    def _rest_left(self):
+        """Ball-CENTRE release point on the left ramp: the surface top-left
+        pushed out by BALL_R along the ramp normal (so the ball rests on it)."""
+        t = math.radians(self.THETA_L)
+        # left ramp rises up-left; upward-facing normal points up-right
+        normal = np.array([math.sin(t), math.cos(t), 0.0])
+        return self._top_left() + self.BALL_R * normal
 
-        # THE most important reveal: draw the dashed HEIGHT LINE, left→right,
-        # anchored at release height. It persists, unchanged, forever after.
-        glow = Line([-7, HEIGHT_Y, 0], [34, HEIGHT_Y, 0],
-                    color=STARLIGHT, stroke_width=7, stroke_opacity=0.05)
-        dash = DashedLine([-7, HEIGHT_Y, 0], [34, HEIGHT_Y, 0],
-                          color=STARLIGHT, stroke_width=2.2,
-                          dash_length=0.16, dashed_ratio=0.55)
-        dash.set_stroke(opacity=0.8)
-        tag = Text("RELEASE HEIGHT", font=FONT_MONO, font_size=28, color=DUST)
-        tag.next_to([-4.6, HEIGHT_Y, 0], UP, buff=0.14).align_to([-4.6, 0, 0], LEFT)
-        self.height_line = VGroup(glow, dash, tag).set_z_index(2)
+    def center_samples(self, theta_deg, x_cap=None):
+        """Ball-centre trajectory (== the visible track line) for a given
+        right-ramp angle. Left ramp + rounded trough arc + right ramp.
+        `x_cap` ends the right side at a given x instead of at the line
+        (used for the endless flat run). Fixed point counts -> clean morphs."""
+        A = self.A
+        P_L = self._tangent_left()
+        T_L = self._top_left()
+        ramp1 = np.array([T_L + (P_L - T_L) * i / (self.NL - 1)
+                          for i in range(self.NL)])
 
-        self.play(Create(dash), FadeIn(glow), run_time=1.1,
-                  rate_func=rate_functions.ease_in_out_sine)
-        self.play(FadeIn(tag, shift=DOWN * 0.06), run_time=0.5)
-        self.wait(0.6)
+        P_R = self._tangent_right(theta_deg)
+        aL = math.atan2(P_L[1] - A[1], P_L[0] - A[0])
+        aR = math.atan2(P_R[1] - A[1], P_R[0] - A[0])
+        arc = np.array([A + self.R * np.array(
+            [math.cos(aL + (aR - aL) * i / (self.NA - 1)),
+             math.sin(aL + (aR - aL) * i / (self.NA - 1)), 0])
+            for i in range(self.NA)])
 
-        # Release — roll down, through the valley, up the right ramp.
-        # A friction-truncated run: it stops a hair BELOW the line.
-        pts = simulate(center_path(56))
-        gap = 0.20
-        stop_i = len(pts) - 1
-        for i in range(len(pts) - 1, -1, -1):
-            if pts[i][0] > 0.2 and pts[i][1] < HEIGHT_Y - gap:
-                stop_i = i
+        t = math.radians(theta_deg)
+        direction = np.array([math.cos(t), math.sin(t), 0])
+        if x_cap is not None:                       # flat / capped run
+            s = (x_cap - P_R[0]) / max(math.cos(t), 1e-3)
+            end = P_R + s * direction
+        else:
+            end = self._top_right(theta_deg)
+        ramp2 = np.array([P_R + (end - P_R) * i / (self.NR - 1)
+                          for i in range(self.NR)])
+
+        return np.vstack([ramp1, arc, ramp2])
+
+    def ball_center_path(self, theta_deg, x_cap=None):
+        """The ball-CENTRE trajectory: the track surface (center_samples) pushed
+        outward by BALL_R along the local surface normal, so the ball rests ON
+        the track instead of sitting centred on it. The normal always points to
+        the side the ball sits (upward, away from the U-track interior)."""
+        surf = self.center_samples(theta_deg, x_cap=x_cap)
+        n = len(surf)
+        offset = np.empty_like(surf)
+        for i in range(n):
+            # local tangent via central differences (forward/backward at ends)
+            if i == 0:
+                tan = surf[1] - surf[0]
+            elif i == n - 1:
+                tan = surf[-1] - surf[-2]
+            else:
+                tan = surf[i + 1] - surf[i - 1]
+            L = math.hypot(tan[0], tan[1])
+            if L < 1e-9:
+                normal = np.array([0.0, 1.0, 0.0])
+            else:
+                # rotate tangent +90°; flip so it points up (ball rests on top)
+                normal = np.array([-tan[1], tan[0], 0.0]) / L
+                if normal[1] < 0:
+                    normal = -normal
+            offset[i] = surf[i] + self.BALL_R * normal
+        return offset
+
+    def make_motion(self, pts, mu=0.0):
+        """Honest energy-conservation profile along `pts`. Returns pos(u) with
+        u in [0,1], total physics-time T, and the actually-traversed points
+        (truncated at the turning point if friction stops it short)."""
+        xs, ys = pts[:, 0], pts[:, 1]
+        y0 = ys[0]
+        times = [0.0]
+        Xh = 0.0
+        v_prev = 0.0
+        turn = len(pts) - 1
+        for i in range(1, len(pts)):
+            dx, dy = xs[i] - xs[i - 1], ys[i] - ys[i - 1]
+            ds = math.hypot(dx, dy)
+            Xh += abs(dx)
+            avail = self.G * (y0 - ys[i]) - mu * self.G * Xh
+            if avail <= 1e-6:                       # ran out of energy -> stops
+                turn = i
+                times.append(times[-1] + ds / max(v_prev / 2, 1e-3))
                 break
-        tr = self.run_ball(ball, pts, run_time=2.3, stop_index=stop_i,
-                           trail_color=STARLIGHT)
-        self.wait(0.4)
-        self.remove(tr)
+            v_i = math.sqrt(2 * avail)
+            v_avg = max((v_prev + v_i) / 2, 1e-3)
+            times.append(times[-1] + ds / v_avg)
+            v_prev = v_i
+        times = np.array(times)
+        seg = pts[:turn + 1]
+        sx, sy, st = seg[:, 0], seg[:, 1], times
+        T = float(st[-1])
 
-        # Push in slightly on the gap. A tiny "should-have-reached" tick.
-        peak = ball.get_center()
-        line_pt = np.array([peak[0], HEIGHT_Y, 0])
-        tick = Line(line_pt + LEFT * 0.16, line_pt + RIGHT * 0.16,
-                    color=STARLIGHT, stroke_width=2).set_z_index(7)
-        ping = Circle(radius=0.05, color=STARLIGHT, stroke_width=2.5,
-                      fill_opacity=0).move_to(line_pt).set_z_index(7)
-        bracket = VGroup(
-            Line(peak + UP * (R_BALL + 0.02), line_pt + DOWN * 0.02,
-                 color=DUST, stroke_width=2),
-            Line(peak + UP * (R_BALL + 0.02) + LEFT * 0.08,
-                 peak + UP * (R_BALL + 0.02) + RIGHT * 0.08,
-                 color=DUST, stroke_width=2),
-        ).set_z_index(7)
-        fric = Text("friction", font=FONT_SERIF, font_size=20, slant=ITALIC,
-                    color=DUST).next_to(bracket, RIGHT, buff=0.16).set_z_index(7)
+        def pos(u):
+            tt = u * T
+            return np.array([np.interp(tt, st, sx), np.interp(tt, st, sy), 0.0])
+        return pos, T, seg
 
-        self.play(self.camera.frame.animate.set(width=8.5)
-                  .move_to(peak + UP * 0.55 + RIGHT * 0.2),
-                  run_time=1.2, rate_func=rate_functions.ease_in_out_cubic)
-        self.play(Create(tick), FadeIn(ping), run_time=0.4)
-        self.play(ping.animate.scale(2.4).set_stroke(opacity=0.0), run_time=0.5)
-        self.remove(ping)
-        self.play(Create(bracket), FadeIn(fric, shift=LEFT * 0.08), run_time=0.6)
+    def v_bottom(self):
+        return math.sqrt(2 * self.G * (self.LINE_Y - self.GROUND_Y))
+
+    # ═══════════════════════════════════════════════ run choreography ═════
+    def roll_run(self, theta_deg, mu=0.0, run_time=2.2, ghost_color=DUST,
+                 return_swing=False, tick=True, x_cap=None):
+        """One release. Drives the ball along the honest profile, lays a live
+        trail, freezes it into the ghost fan, and (optionally) drops a vertical
+        tick up to the line and swings the ball back to the start."""
+        pts = self.ball_center_path(theta_deg, x_cap=x_cap)        # ball centre
+        surf = self.center_samples(theta_deg, x_cap=x_cap)         # contact line
+        pos, T, _ = self.make_motion(pts, mu=mu)
+        _, _, seg_surf = self.make_motion(surf, mu=mu)             # ghost on track
+
+        self.ball.move_to(pos(0.0))
+        u = ValueTracker(0.0)
+        self.ball.add_updater(lambda m: m.move_to(pos(u.get_value())))
+
+        trail = TracedPath(self.ball.disc.get_center, stroke_color=ghost_color,
+                           stroke_width=3, dissipating_time=0.6,
+                           stroke_opacity=0.7)
+        self.add(trail)
+        self.play(u.animate.set_value(1.0), run_time=run_time, rate_func=linear)
+        self.ball.clear_updaters()
+        self.remove(trail)
+
+        # freeze the actual trajectory as a persistent ghost arc (on the track)
+        ghost = VMobject().set_points_as_corners([p for p in seg_surf])
+        ghost.set_stroke(ghost_color, width=2, opacity=0.0)
+        self.ghosts.set_stroke(opacity=0.14)        # dim the older fan further
+        self.add(ghost)
+        self.play(ghost.animate.set_stroke(opacity=0.30), run_time=0.4)
+        self.ghosts.add(ghost)
+
+        end = self.ball.get_center()
+        if tick:
+            t_line = DashedLine(end, np.array([end[0], self.LINE_Y, 0]),
+                                dash_length=0.10, color=AMBER,
+                                stroke_width=1.4, stroke_opacity=0.0)
+            self.add(t_line)
+            self.play(t_line.animate.set_stroke(opacity=0.55), run_time=0.4)
+            self.summit_ticks.add(t_line)
+
+        if return_swing:                            # honest: it returns to height
+            self.ball.add_updater(lambda m: m.move_to(pos(u.get_value())))
+            self.play(u.animate.set_value(0.0), run_time=run_time * 0.92,
+                      rate_func=linear)
+            self.ball.clear_updaters()
+
+    def fade_reset_to_left(self):
+        """Quietly return the live ball to the left release point (used in the
+        rapid Act-4 cadence where a full return swing would kill the rhythm)."""
+        self.play(self.ball.animate.set_opacity(0.0), run_time=0.18)
+        self.ball.move_to(self._rest_left())
+        self.play(self.ball.animate.set_opacity(1.0), run_time=0.18)
+
+    # ═══════════════════════════════════════════════════════════════ A1 ═══
+    def act1_assemble_and_flip(self):
+        # 1) The character arrives FIRST, alone, before any world exists.
+        self.ball = make_ball(STARLIGHT, radius=self.BALL_R)
+        self.ball.move_to(UP * 1.4)
+        self.ball.set_z_index(8)
+        self.play(FadeIn(self.ball, shift=DOWN * 0.5, scale=0.6),
+                  run_time=0.9, rate_func=rate_functions.ease_out_cubic)
+        self.wait(0.5)
+
+        # 2) The world assembles AROUND it. Ground draws L->R; the U-track grows.
+        self.ground = Line(LEFT * 14 + UP * self.GROUND_Y,
+                           RIGHT * 14 + UP * self.GROUND_Y,
+                           color=C_GROUND, stroke_width=2.0, stroke_opacity=0.85)
+        self.play(Create(self.ground), run_time=1.0,
+                  rate_func=rate_functions.ease_in_out_sine)
+        self.add(self.frame_marks)
+        self.play(self.frame_marks.animate.set_opacity(0.5), run_time=0.7)
+
+        # settle the ball onto the left top as the track is carved beneath it
+        self.track = VMobject().set_points_as_corners(
+            [p for p in self.center_samples(self.THETA_RUN_IDEAL)])
+        self.track.set_stroke(DUST, width=3, opacity=0.0)
+        self.add(self.track)
+        self.play(
+            self.track.animate.set_stroke(opacity=0.8),
+            self.ball.animate.move_to(self._rest_left()),
+            run_time=1.3, rate_func=rate_functions.ease_in_out_cubic,
+        )
+        self.current_theta = self.THETA_RUN_IDEAL
+        self.wait(0.5)
+
+        # 3) The reversed question. Show the OLD framing, then physically flip
+        #    it (magic-move) into the real one. The flip IS the thesis.
+        old = Text("What makes it stop?", font=SERIF, font_size=46,
+                   color=STARLIGHT).move_to(UP * 2.45).set_z_index(12)
+        self.play(Write(old), run_time=1.1)
         self.wait(0.9)
-
-        # IDEALIZE. "Ignore friction." A clean shimmer; the gap CLOSES; the
-        # ball kisses the line exactly. From here every run returns to the line.
-        ideal = Text("Ignore friction.", font=FONT_SERIF, font_size=26,
-                     slant=ITALIC, color=CYAN).move_to(peak + UP * 1.45 + RIGHT * 0.2)
-        ideal.set_z_index(8)
-        self.play(FadeIn(ideal, shift=DOWN * 0.1), run_time=0.6)
-
-        shimmer = self.surface.copy()
-        shimmer.set_z_index(4)
-        for sub in shimmer:
-            sub.set_stroke(CYAN, opacity=0.0)
-        self.add(shimmer)
-        self.play(
-            FadeOut(bracket), FadeOut(fric), FadeOut(tick),
-            shimmer[1].animate.set_stroke(CYAN, width=4, opacity=0.7),
-            run_time=0.5)
-        self.play(
-            ball.animate.move_to(pts[-1]),       # gap closes — kisses the line
-            shimmer[1].animate.set_stroke(opacity=0.0),
-            run_time=0.7, rate_func=rate_functions.ease_in_out_sine)
-        self.remove(shimmer)
-
-        kiss = Circle(radius=0.05, color=STARLIGHT, stroke_width=2.5,
-                      fill_opacity=0).move_to(pts[-1]).set_z_index(7)
-        self.add(kiss)
-        self.play(kiss.animate.scale(3).set_stroke(opacity=0.0), run_time=0.5)
-        self.remove(kiss)
-        self.wait(0.7)
-
-        self.act2_landing_x = float(pts[-1][0])
-
-        self.play(
-            FadeOut(ideal, shift=UP * 0.1),
-            Restore(self.camera.frame),
-            run_time=1.1, rate_func=rate_functions.ease_in_out_cubic)
-        self.wait(0.4)
-
-    # ===================================================================== A3
-    def act3_gentle_the_slope(self):
-        ball = self.ball
-
-        # Reset the ball to the release point (same height, every run).
-        self.play(FadeOut(ball, scale=0.7), run_time=0.4)
-        ball.move_to(RELEASE_CENTER)
-        self.play(FadeIn(ball, scale=0.7), run_time=0.4)
-
-        # ROTATE the right ramp gentler — a deliberate, visible pivot at the
-        # valley bottom. The height line does NOT move. Hold the contrast.
-        pivot = Dot(ramp_geometry(38)["V"], radius=0.045, color=DUST).set_z_index(4)
-        self.play(FadeIn(pivot, scale=0.6), run_time=0.3)
-        self.play(self.aR.animate.set_value(38), run_time=0.85,
-                  rate_func=rate_functions.ease_in_out_sine)
-        self.wait(0.7)
-
-        # Release again — travels noticeably farther to the SAME line.
-        pts = simulate(center_path(38))
-        tr = self.run_ball(ball, pts, run_time=2.5, trail_color=STARLIGHT)
-        self.wait(0.6)
-        self.play(FadeOut(tr), run_time=0.3)
-        self.remove(tr)
-
-        land_x = float(pts[-1][0])
-
-        # Faint GHOST of Act-2's shorter landing point, beside the new one.
-        ghost = Dot([self.act2_landing_x, HEIGHT_Y, 0], radius=0.06,
-                    color=DUST).set_z_index(5).set_opacity(0.5)
-        new_dot = Dot([land_x, HEIGHT_Y, 0], radius=0.07,
-                      color=AMBER).set_z_index(5)
-        self.play(FadeIn(ghost, scale=0.6), FadeIn(new_dot, scale=0.6),
-                  run_time=0.5)
-
-        # DISTANCE bracket along the floor — the VARIABLE, in Amber focus.
-        by = VALLEY_Y - 0.7
-        dist = VGroup(
-            Line([0, by, 0], [land_x, by, 0], color=AMBER, stroke_width=2.4),
-            Line([0, by - 0.12, 0], [0, by + 0.12, 0], color=AMBER, stroke_width=2.4),
-            Line([land_x, by - 0.12, 0], [land_x, by + 0.12, 0],
-                 color=AMBER, stroke_width=2.4),
-        ).set_z_index(6)
-        dist_lab = Text("distance", font=FONT_SERIF, font_size=22, slant=ITALIC,
-                        color=AMBER).next_to(dist[0], DOWN, buff=0.14).set_z_index(6)
-        self.play(Create(dist), FadeIn(dist_lab, shift=UP * 0.08), run_time=0.8)
-        self.wait(1.1)
-
-        # tidy up, keep the new landing dot as the first of the procession
-        self.landing_dots.add(new_dot)
-        self.add(self.landing_dots)
-        self.play(FadeOut(VGroup(dist, dist_lab, ghost, pivot)), run_time=0.7)
-        self.wait(0.3)
-
-    # ===================================================================== A4
-    def act4_gentler(self):
-        ball = self.ball
-        angles = [30, 24, 19, 15]
-        rhythm = [2.0, 1.7, 1.45, 1.25]   # accelerate the flipbook
-
-        for k, (aR, rt) in enumerate(zip(angles, rhythm)):
-            # age the older ghosts — the newest run will be the crispest "now"
-            for gm in self.ghosts:
-                gm.set_stroke(opacity=max(gm.get_stroke_opacity() * 0.6, 0.05))
-
-            # reset the ball; swing the ramp gentler (height line stays pinned)
-            ball.move_to(RELEASE_CENTER)
-            self.play(self.aR.animate.set_value(aR), run_time=0.6,
-                      rate_func=rate_functions.ease_in_out_sine)
-
-            pts = simulate(center_path(aR))
-            land_x = float(pts[-1][0])
-
-            # pull the camera back as the dots march toward the horizon
-            cam_w = min(land_x * 1.55 + 8.5, 26)
-            cam_c = np.array([land_x * 0.42, 0.1, 0])
-            self.play(self.camera.frame.animate.set(width=cam_w).move_to(cam_c),
-                      run_time=0.7, rate_func=rate_functions.ease_in_out_sine)
-
-            tr = self.run_ball(ball, pts, run_time=rt, trail_color=STARLIGHT)
-            self.play(FadeOut(tr), run_time=0.25)
-            self.remove(tr)
-
-            # the run leaves a persistent ghost arc + an Amber landing dot
-            arc = VMobject(stroke_color=STARLIGHT, stroke_width=2.4,
-                           stroke_opacity=0.55)
-            arc.set_points_as_corners([np.array(p) for p in subsample(pts, 90)])
-            self.ghosts.add(arc)
-            self.add(self.ghosts)
-            dot = Dot([land_x, HEIGHT_Y, 0], radius=0.07, color=AMBER).set_z_index(2)
-            self.landing_dots.add(dot)
-            self.add(self.landing_dots)
-            self.play(FadeIn(dot, scale=0.5), run_time=0.3)
-            self.wait(0.25)
-
-        self.wait(0.8)
-
-    # ===================================================================== A5
-    def act5_flat_forever(self):
-        ball = self.ball
-
-        # Frame the contrast cleanly before the final rotation.
-        self.play(self.camera.frame.animate.set(width=20).move_to([4.0, 0.0, 0]),
-                  run_time=1.0, rate_func=rate_functions.ease_in_out_cubic)
-
-        ball.move_to(RELEASE_CENTER)
-
-        # FINAL ROTATION: the right ramp all the way down to FLAT — now
-        # perfectly parallel to the dashed height line. Pause on the payoff:
-        # parallel forever; the gap never closes; the meeting point fled to ∞.
-        self.play(self.aR.animate.set_value(0.0), run_time=1.2,
-                  rate_func=rate_functions.ease_in_out_sine)
-        self.wait(0.4)
-
-        # a quiet "the gap never closes" double-tick at two far separations
-        g_far = VGroup(
-            Line([6, VALLEY_Y + R_BALL * 2, 0], [6, HEIGHT_Y, 0],
-                 color=DUST, stroke_width=1.4, stroke_opacity=0.5),
-            Line([10.5, VALLEY_Y + R_BALL * 2, 0], [10.5, HEIGHT_Y, 0],
-                 color=DUST, stroke_width=1.4, stroke_opacity=0.5),
-        ).set_z_index(4)
-        self.play(Create(g_far), run_time=0.6)
-        self.wait(0.6)
-        self.play(FadeOut(g_far), run_time=0.5)
-
-        # Release one last time — down the left, through the valley, onto the
-        # flat — and it just KEEPS GOING. Camera tracks; it does not slow.
-        pts = simulate(center_path(0.0))
-        N = len(pts)
-        idx = ValueTracker(0)
-        ball.add_updater(
-            lambda m: m.move_to(pts[int(np.clip(idx.get_value(), 0, N - 1))]))
-        tr = TracedPath(ball.get_center, stroke_color=STARLIGHT,
-                        stroke_width=3, dissipating_time=0.55)
-        tr.set_stroke(opacity=0.5)
-        self.add(tr)
-        # camera follows the ball's x once it's on the flat
-        cam = self.camera.frame
-        cam.add_updater(lambda m: m.move_to(
-            [max(4.0, ball.get_center()[0] + 2.0), 0.0, 0]))
-        self.play(idx.animate.set_value(N - 1), run_time=3.0, rate_func=linear)
-        cam.clear_updaters()
-        ball.clear_updaters()
-        self.remove(tr)
-        self.wait(0.4)
-
-        # ── THE HOLD OF THE SCENE: extend the floor to a vanishing point. ──
-        # >>> EDIT: the air-hockey / curling cut belongs right here (~2 s).
-        self.play(Restore(self.camera.frame), run_time=1.2,
+        new = Text("What keeps it going?", font=SERIF, font_size=46,
+                   color=STARLIGHT, t2c={"going": AMBER},
+                   t2w={"going": BOLD}).move_to(UP * 2.45).set_z_index(12)
+        self.play(TransformMatchingShapes(old, new),
+                  run_time=1.1, rate_func=rate_functions.ease_in_out_sine)
+        self.question = new
+        self.wait(1.0)
+        self.play(self.question.animate.scale(0.62).to_edge(UP, buff=0.45)
+                  .set_opacity(0.65), run_time=0.9,
                   rate_func=rate_functions.ease_in_out_cubic)
 
-        # perspective road that recedes to the right, meeting the horizon
-        # (= the height line) only at infinity.
-        self.VP = np.array([5.8, HEIGHT_Y, 0.0])
-        self.FG = np.array([-5.2, VALLEY_Y + R_BALL, 0.0])
-        self.WMAX = 2.0
-        self.road_phase = ValueTracker(0.0)
-        NR = 16
-
-        def road_point(p):                # p: 0 = at VP (far), 1 = foreground
-            g = p ** 1.7
-            return self.VP + (self.FG - self.VP) * g, self.WMAX * (p ** 1.7), g
-
-        def make_rungs():
-            grp = VGroup()
-            ph = self.road_phase.get_value()
-            for k in range(NR):
-                p = (ph + k / NR) % 1.0
-                c, hw, g = road_point(p)
-                op = float(np.clip(g * 1.6, 0, 0.5)) * float(np.clip((1.04 - g) * 4, 0, 1))
-                grp.add(Line(c + UP * hw, c + DOWN * hw, color=DUST,
-                             stroke_width=0.8 + 2.2 * g, stroke_opacity=op))
-            return grp.set_z_index(-2)
-
-        top_rail = Line(self.VP, self.FG + UP * self.WMAX, color=DUST,
-                        stroke_width=1.4, stroke_opacity=0.32).set_z_index(-2)
-        bot_rail = Line(self.VP, self.FG + DOWN * self.WMAX, color=DUST,
-                        stroke_width=1.4, stroke_opacity=0.32).set_z_index(-2)
-
-        # the ball becomes a steady, shrinking dot receding toward the VP
-        dot_p = 0.55
-        dc, _, _ = road_point(dot_p)
-        dot = make_ball(radius=0.09).move_to(dc).set_z_index(3)
-
-        self.play(
-            FadeOut(self.ghosts), FadeOut(self.landing_dots),
-            FadeOut(self.surface),
-            Create(top_rail), Create(bot_rail),
-            ReplacementTransform(ball, dot),
-            run_time=1.3, rate_func=rate_functions.ease_in_out_sine)
-
-        rungs = always_redraw(make_rungs)
-        self.add(rungs)
-
-        # the flow never stops — constant speed, forever
-        driver = Mobject()
-        driver.add_updater(lambda m, dt: self.road_phase.increment_value(dt * 0.10))
-        self.add(driver)
-
-        # a faint mote-trail keeps the steady dot alive without it moving
-        trail = TracedPath(dot.get_center, stroke_color=STARLIGHT,
-                           stroke_width=2, dissipating_time=0.6)
-        trail.set_stroke(opacity=0.0)
-        self.add(trail)
-
-        self.wait(4.0)        # the longest hold in the scene — let it sit
-
-        driver.clear_updaters()
-        self.play(
-            FadeOut(VGroup(rungs, top_rail, bot_rail, dot)),
-            self.height_line.animate.set_opacity(0.0),
-            self.backdrop.animate.set_opacity(0.0),
-            run_time=1.2, rate_func=rate_functions.ease_in_out_sine)
-        self.remove(rungs, driver, trail)
-        self.wait(0.3)
-
-    # ===================================================================== A6
-    def act6_the_flip(self):
-        # Cut the apparatus. Bring up the old belief.
-        pre = Text("Things need a reason to", font=FONT_SERIF, font_size=34,
-                   weight="LIGHT", color=STARLIGHT)
-        move = Text("MOVE", font=FONT_SERIF, font_size=34, weight="SEMIBOLD",
-                    color=STARLIGHT)
-        line = VGroup(pre, move).arrange(RIGHT, buff=0.28).move_to(UP * 0.4)
-        line.set_z_index(8)
-        self.play(Write(pre), run_time=0.9)
-        self.play(FadeIn(move, shift=UP * 0.08), run_time=0.5)
-        self.wait(1.0)
-
-        # Morph MOVE → STOP in place — watch the inversion happen.
-        stop = Text("STOP", font=FONT_SERIF, font_size=34, weight="SEMIBOLD",
-                    color=AMBER).move_to(move).set_z_index(8)
-        self.play(TransformMatchingShapes(move, stop), run_time=1.1)
-        self.wait(1.1)
-        self.play(VGroup(pre, stop).animate.scale(0.8).move_to(UP * 2.6),
-                  run_time=0.9, rate_func=rate_functions.ease_in_out_sine)
-
-        # Personify: two tiny side-by-side demos of the same stubbornness.
-        gy = -1.4
-        gL = Line([-6.0, gy, 0], [-0.6, gy, 0], color=GROUND, stroke_width=2.5,
-                  stroke_opacity=0.7)
-        gR = Line([0.6, gy, 0], [6.0, gy, 0], color=GROUND, stroke_width=2.5,
-                  stroke_opacity=0.7)
-        self.play(Create(gL), Create(gR), run_time=0.6)
-
-        # LEFT — a resting ball gets a nudge and DIGS IN (refuses to budge).
-        rest = make_ball(radius=0.22).move_to([-3.0, gy + 0.22, 0]).set_z_index(5)
-        rest_sh = contact_shadow(0.22).move_to([-3.0, gy + 0.01, 0]).set_z_index(4)
-        self.play(FadeIn(rest, scale=0.7), FadeIn(rest_sh), run_time=0.5)
-        nudge = Arrow([-4.1, gy + 0.22, 0], [-3.35, gy + 0.22, 0], buff=0,
-                      color=FORCE, stroke_width=5,
-                      max_tip_length_to_length_ratio=0.32).set_z_index(6)
-        self.play(GrowArrow(nudge), run_time=0.4)
-        # it gives the tiniest twitch and settles right back
-        self.play(rest.animate.shift(RIGHT * 0.07), run_time=0.18,
-                  rate_func=rate_functions.ease_out_quad)
-        self.play(rest.animate.shift(LEFT * 0.07), run_time=0.45,
-                  rate_func=rate_functions.ease_out_elastic)
-        self.play(FadeOut(nudge, shift=LEFT * 0.2), run_time=0.4)
-
-        # RIGHT — a moving ball gets a "stop" tap and GLIDES RIGHT THROUGH IT.
-        glide = make_ball(radius=0.22).move_to([0.9, gy + 0.22, 0]).set_z_index(5)
-        glide_sh = contact_shadow(0.22).set_z_index(4)
-        glide_sh.add_updater(lambda m: m.move_to([glide.get_center()[0],
-                                                  gy + 0.01, 0]))
-        v_arr = always_redraw(lambda: Arrow(
-            glide.get_center() + RIGHT * 0.28,
-            glide.get_center() + RIGHT * 0.78, buff=0, color=VEL,
-            stroke_width=4, max_tip_length_to_length_ratio=0.4).set_z_index(6))
-        self.add(glide_sh, v_arr)
-        self.play(FadeIn(glide, scale=0.7), run_time=0.5)
-
-        voice = Text("\u201cI'll keep doing what I'm doing.\u201d",
-                     font=FONT_SERIF, font_size=20, slant=ITALIC, color=DUST)
-        voice.move_to([2.9, gy + 1.1, 0]).set_z_index(7)
-
-        tap = Arrow([4.6, gy + 0.22, 0], [3.9, gy + 0.22, 0], buff=0,
-                    color=FORCE, stroke_width=5,
-                    max_tip_length_to_length_ratio=0.32).set_z_index(6)
-        # the ball just keeps going at constant speed — the tap does nothing
-        self.play(
-            glide.animate(rate_func=linear).move_to([5.4, gy + 0.22, 0]),
-            FadeIn(voice, shift=UP * 0.08),
-            Succession(Wait(0.7), GrowArrow(tap), Wait(0.2),
-                       FadeOut(tap, scale=0.6)),
-            run_time=2.4)
-        glide_sh.clear_updaters()
-        self.wait(0.5)
-
-        # Land on a single word.
-        self.play(
-            FadeOut(VGroup(gL, gR, rest, rest_sh, glide, glide_sh, voice)),
-            FadeOut(v_arr),
-            VGroup(pre, stop).animate.set_opacity(0.0).shift(UP * 0.2),
-            run_time=0.9, rate_func=rate_functions.ease_in_out_sine)
-        self.remove(v_arr)
-
-        lazy = Text("lazy", font=FONT_SERIF, font_size=72, weight="LIGHT",
-                    slant=ITALIC, color=AMBER).move_to(ORIGIN).set_z_index(9)
-        lazy_glow = lazy.copy().set_color(AMBER).set_opacity(0.0)
-        self.play(Write(lazy), run_time=1.3)
-        # one last lazy little settle
-        self.play(lazy.animate.shift(DOWN * 0.06), run_time=0.5,
-                  rate_func=rate_functions.ease_out_sine)
-        self.play(lazy.animate.shift(UP * 0.06), run_time=0.8,
+    # ═══════════════════════════════════════════════════════════════ A2 ═══
+    def act2_anchor_and_almost(self):
+        # THE LINE — the single most important object. Treat it as a reveal.
+        self.line = DashedLine(
+            np.array([self._top_left()[0], self.LINE_Y, 0]),
+            RIGHT * 14 + UP * self.LINE_Y,
+            dash_length=0.16, dashed_ratio=0.6, color=AMBER,
+            stroke_width=2.4, stroke_opacity=0.95)
+        self.play(Create(self.line), run_time=1.2,
                   rate_func=rate_functions.ease_in_out_sine)
+        glow = self.line.copy().set_stroke(AMBER, width=7, opacity=0.5)
+        self.play(ShowPassingFlash(glow, time_width=0.5), run_time=1.0)
+        rel = Text("RELEASE HEIGHT", font=MONO, font_size=13, color=AMBER)
+        rel.next_to(self.line.get_start(), UP, buff=0.14).align_to(
+            self.line.get_start(), LEFT)
+        self.play(FadeIn(rel, shift=UP * 0.06), run_time=0.5)
+        self.wait(0.4)
+        self.play(FadeOut(rel), run_time=0.5)
+
+        # First release WITH friction -> stops just short. The gap is real:
+        # it is exactly the friction work mu*g*X expressed as lost height.
+        self.roll_run(self.THETA_RUN_IDEAL, mu=0.085, run_time=2.3,
+                      ghost_color=DUST, tick=False)
+        end = self.ball.get_center()
+
+        # bracket the deficit and name it: friction (force pigment, used once)
+        gap_top = np.array([end[0], self.LINE_Y, 0])
+        brace = VGroup(
+            Line(end + RIGHT * 0.16, gap_top + RIGHT * 0.16,
+                 color=C_FORCE, stroke_width=2),
+            Line(end + RIGHT * 0.10, end + RIGHT * 0.22,
+                 color=C_FORCE, stroke_width=2),
+            Line(gap_top + RIGHT * 0.10, gap_top + RIGHT * 0.22,
+                 color=C_FORCE, stroke_width=2),
+        )
+        flbl = Text("FRICTION", font=MONO, font_size=13, color=C_FORCE)
+        flbl.next_to(brace, RIGHT, buff=0.16)
+        self.play(Create(brace), FadeIn(flbl, shift=RIGHT * 0.06), run_time=0.7)
         self.wait(1.0)
 
-        # Optional forward-lean (cuttable — your handoff control).
-        tease = Text("\u2026but is everything equally lazy?",
-                     font=FONT_SERIF, font_size=24, slant=ITALIC, color=DUST)
-        tease.move_to(DOWN * 1.9).set_z_index(8)
-        self.play(FadeIn(tease, shift=UP * 0.1), run_time=1.0,
-                  rate_func=rate_functions.ease_out_cubic)
+        # "Idealize away the mess" — the shimmer sweeps the track clean.
+        shimmer = self.track.copy().set_stroke(STARLIGHT, width=5, opacity=0.9)
+        self.play(
+            ShowPassingFlash(shimmer, time_width=0.45),
+            FadeOut(brace), FadeOut(flbl),
+            self.track.animate.set_stroke(STARLIGHT, width=3, opacity=0.7),
+            FadeOut(self.ghosts),
+            run_time=1.3, rate_func=rate_functions.ease_in_out_sine,
+        )
+        self.ghosts = VGroup()
+        # clean reset of the character to the top — the ideal world begins
+        self.play(self.ball.animate.set_opacity(0.0), run_time=0.25)
+        self.ball.move_to(self._rest_left())
+        self.play(self.ball.animate.set_opacity(1.0), run_time=0.3)
+        self.wait(0.4)
+
+        # Frictionless release -> touches the line EXACTLY, then returns.
+        self.roll_run(self.THETA_RUN_IDEAL, mu=0.0, run_time=2.2,
+                      ghost_color=DUST, return_swing=True, tick=True)
+        self.wait(0.8)
+
+    # ═══════════════════════════════════════════════════════════════ A3 ═══
+    def act3_gentler(self):
+        new_track = VMobject().set_points_as_corners(
+            [p for p in self.center_samples(self.THETA_RUN_A3)])
+        new_track.match_style(self.track)
+        # The LINE holds; only the right ramp lies back.
+        self.play(Transform(self.track, new_track), run_time=1.3,
+                  rate_func=rate_functions.ease_in_out_cubic)
+        self.current_theta = self.THETA_RUN_A3
+        self.wait(0.4)
+
+        # Same height, longer reach. Keep the previous ghost arc beside it.
+        self.roll_run(self.THETA_RUN_A3, mu=0.0, run_time=2.7,
+                      ghost_color=DUST, return_swing=True, tick=True)
+        self.wait(0.9)
+
+    # ═══════════════════════════════════════════════════════════════ A4 ═══
+    def act4_cadence(self):
+        # three quick beats — gentler... gentler... gentler — camera easing back
+        zooms = [1.18, 1.42, 1.72]
+        run_times = [2.4, 2.7, 3.0]
+        for theta, zoom, rt in zip(self.THETA_RUN_A4, zooms, run_times):
+            new_track = VMobject().set_points_as_corners(
+                [p for p in self.center_samples(theta)])
+            new_track.match_style(self.track)
+            self.play(
+                Transform(self.track, new_track),
+                self.camera.frame.animate.scale(
+                    zoom / (self.camera.frame.get_width() / config.frame_width)
+                ).move_to(RIGHT * (zoom - 1) * 3.2 + UP * (zoom - 1) * 0.6),
+                run_time=1.0, rate_func=rate_functions.ease_in_out_cubic,
+            )
+            self.current_theta = theta
+            self.roll_run(theta, mu=0.0, run_time=rt, ghost_color=DUST,
+                          return_swing=False, tick=True)
+            self.fade_reset_to_left()
+
+        # The fan of ghost-arcs is the argument: height invariant, reach exploding.
+        self.wait(1.0)
+
+    # ═══════════════════════════════════════════════════════════════ A5 ═══
+    def act5_flat_forever(self):
+        # Restore a calm, stable framing centred on the ball's cruise line.
+        self.play(
+            self.camera.frame.animate.restore().move_to(RIGHT * 0.4 + UP * 0.2),
+            FadeOut(self.ghosts), FadeOut(self.summit_ticks),
+            run_time=1.2, rate_func=rate_functions.ease_in_out_cubic,
+        )
+        self.ghosts = VGroup()
+        self.summit_ticks = VGroup()
+
+        # Final rotation: the right ramp lies all the way down to horizontal.
+        flat_track = VMobject().set_points_as_corners(
+            [p for p in self.center_samples(0.001, x_cap=12.0)])
+        flat_track.match_style(self.track)
+        self.play(Transform(self.track, flat_track), run_time=1.4,
+                  rate_func=rate_functions.ease_in_out_cubic)
+
+        # Make the geometric fact land: ramp and line are now parallel.
+        par = Text("parallel lines never meet", font=SERIF, slant=ITALIC,
+                   font_size=24, color=DUST).move_to(UP * 2.3 + RIGHT * 0.4)
+        self.play(FadeIn(par, shift=UP * 0.08), run_time=0.7)
+        self.wait(0.8)
+        self.play(FadeOut(par), run_time=0.6)
+
+        # Release onto the flat. Roll honestly down + through to centre frame...
+        center_x = 0.4
+        pts = self.ball_center_path(0.001, x_cap=center_x)
+        pos, T, seg = self.make_motion(pts, mu=0.0)
+        self.ball.move_to(pos(0.0))
+        u = ValueTracker(0.0)
+        self.ball.add_updater(lambda m: m.move_to(pos(u.get_value())))
+        trail = TracedPath(self.ball.disc.get_center, stroke_color=DUST,
+                           stroke_width=3, dissipating_time=0.7,
+                           stroke_opacity=0.6)
+        self.add(trail)
+        self.play(u.animate.set_value(1.0), run_time=2.2, rate_func=linear)
+        self.ball.clear_updaters()
+        self.remove(trail)
+
+        # ...then LOCK the ball at centre and scroll the world past it forever.
+        v = min(self.v_bottom(), 3.0)               # constant cruise (no easing)
+        line_y, ground_y = self.LINE_Y, self.GROUND_Y
+        cy = self.ball.get_center()[1]
+
+        world = VGroup()
+        ground_long = Line(LEFT * 60 + UP * ground_y, RIGHT * 60 + UP * ground_y,
+                           color=C_GROUND, stroke_width=2.0, stroke_opacity=0.85)
+        line_long = DashedLine(LEFT * 60 + UP * line_y, RIGHT * 60 + UP * line_y,
+                               dash_length=0.16, dashed_ratio=0.6, color=AMBER,
+                               stroke_width=2.4, stroke_opacity=0.95)
+        world.add(ground_long, line_long)
+        for k in range(-120, 360):                  # floor markers, evenly spaced
+            tx = k * 0.5
+            tk = Line(UP * 0.06, DOWN * 0.06, color=C_GROUND, stroke_width=1.2,
+                      stroke_opacity=0.30).move_to(RIGHT * tx + UP * ground_y)
+            world.add(tk)
+        world.set_z_index(-1)
+        self.add(world)
+        self.remove(self.track, self.ground, self.line)
+
+        state = {"t": 0.0, "emit": 0.0}
+
+        def scroll(m, dt):
+            m.shift(LEFT * v * dt)
+            state["t"] += dt
+            state["emit"] += dt
+            if state["emit"] >= 0.16:               # ball "emits" a fading dot
+                state["emit"] = 0.0
+                d = Dot(radius=0.05, color=DUST, fill_opacity=0.5)
+                d.move_to(self.ball.disc.get_center())
+                m.add(d)
+        world.add_updater(scroll)
+
+        self.ball.set_z_index(8)
+        # Let it run LONGER than feels comfortable — that unease is the point.
+        self.wait(5.5)
+        self.scroll_world = world
+        self.scroll_fn = scroll
+
+    # ═══════════════════════════════════════════════════════════════ A6 ═══
+    def act6_reframe(self):
+        # A clean text beat against the still-cruising ball. One swapped word.
+        old = Text("To MOVE, you need a reason.", font=SERIF, font_size=40,
+                   color=STARLIGHT, t2c={"MOVE": AMBER}, t2w={"MOVE": BOLD})
+        old.move_to(UP * 2.4 + RIGHT * 0.4).set_z_index(14)
+        self.play(Write(old), run_time=1.1)
+        self.wait(1.2)
+        new = Text("To STOP, you need a reason.", font=SERIF, font_size=40,
+                   color=STARLIGHT, t2c={"STOP": AMBER}, t2w={"STOP": BOLD})
+        new.move_to(UP * 2.4 + RIGHT * 0.4).set_z_index(14)
+        self.play(TransformMatchingShapes(old, new), run_time=1.2,
+                  rate_func=rate_functions.ease_in_out_sine)
+        self.reframe = new
+        self.wait(1.8)
+        self.play(self.reframe.animate.scale(0.7).to_edge(UP, buff=0.5)
+                  .set_opacity(0.6), self.question.animate.scale(0.7).move_to([0,8,0]).set_opacity(0.0), 
+                  rate_func=rate_functions.ease_in_out_cubic)
+
+    # ═══════════════════════════════════════════════════════════════ A7 ═══
+    def act7_lazy(self):
+        # Ease the world to a stop and return full focus to the character.
+        if hasattr(self, "scroll_world"):
+            self.scroll_world.remove_updater(self.scroll_fn)
+            self.play(self.scroll_world.animate.shift(LEFT * 0.6), run_time=1.4,
+                      rate_func=rate_functions.ease_out_cubic)
+        self.play(
+            self.camera.frame.animate.move_to(self.ball.get_center() + UP * 0.6),
+            run_time=1.0, rate_func=rate_functions.ease_in_out_cubic,
+        )
+
+        # Give it a voice — a thought resolving beside it.
+        thought = VGroup(
+            Text("Moving? I'll keep moving.", font=SERIF, slant=ITALIC,
+                 font_size=24, color=STARLIGHT),
+            Text("At rest? I'll stay at rest.", font=SERIF, slant=ITALIC,
+                 font_size=24, color=STARLIGHT),
+            Text("Don't disturb me.", font=SERIF, slant=ITALIC,
+                 font_size=24, color=DUST),
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.18)
+        thought.next_to(self.ball, UR, buff=0.5).shift(UP * 0.3)
+        thought.set_z_index(14)
+        dots = VGroup(*[Dot(radius=0.03, color=STARLIGHT, fill_opacity=0.6)
+                        for _ in range(3)])
+        for i, d in enumerate(dots):
+            d.move_to(self.ball.get_center()
+                      + np.array([0.35 + i * 0.18, 0.30 + i * 0.16, 0]))
+        self.play(LaggedStart(*[FadeIn(d, scale=0.5) for d in dots],
+                              lag_ratio=0.3), run_time=0.6)
+        self.play(LaggedStart(*[FadeIn(t, shift=UP * 0.06) for t in thought],
+                              lag_ratio=0.25), run_time=1.4)
         self.wait(1.6)
 
-        self.play(FadeOut(VGroup(lazy, tease)), run_time=1.0)
-        self.wait(0.5)
+        # Two paired vignettes — moving-continuing vs resting-staying: same attitude.
+        self.play(FadeOut(thought), FadeOut(dots), run_time=0.6)
+        v_move = self._vignette(moving=True).move_to(
+            self.ball.get_center() + LEFT * 2.4 + DOWN * 1.7)
+        v_rest = self._vignette(moving=False).move_to(
+            self.ball.get_center() + RIGHT * 2.4 + DOWN * 1.7)
+        eq = Text("same attitude", font=MONO, font_size=15, color=AMBER)
+        eq.move_to(self.ball.get_center() + DOWN * 1.7)
+        self.play(LaggedStart(FadeIn(v_move, shift=UP * 0.1),
+                              FadeIn(v_rest, shift=UP * 0.1), lag_ratio=0.25),
+                  run_time=0.9)
+        self.play(FadeIn(eq, scale=0.7), run_time=0.5)
+        self.play(eq.animate.scale(1.12), rate_func=there_and_back,
+                  run_time=0.7)
+        self.wait(1.0)
+        self.play(FadeOut(v_move), FadeOut(v_rest), FadeOut(eq), run_time=0.7)
+
+        # Land on the one-word distillation. Hold the ball with the word.
+        lazy = Text("Lazy", font=SERIF, slant=ITALIC, font_size=58,
+                    color=STARLIGHT).next_to(self.ball, UP, buff=0.55)
+        lazy.set_z_index(14)
+        self.play(Write(lazy), run_time=1.0)
+        self.wait(0.8)
+
+    def _vignette(self, moving):
+        g = VGroup()
+        b = Circle(radius=0.16, stroke_color=STARLIGHT, stroke_width=2,
+                   fill_color=STARLIGHT, fill_opacity=0.9)
+        base = Line(LEFT * 0.9, RIGHT * 0.9, color=C_GROUND, stroke_width=1.6,
+                    stroke_opacity=0.6).next_to(b, DOWN, buff=0.16)
+        g.add(base, b)
+        if moving:
+            for i, op in enumerate((0.5, 0.32, 0.16)):
+                d = Line(ORIGIN, RIGHT * 0.16, stroke_color=C_VEL,
+                         stroke_width=2.4, stroke_opacity=op)
+                d.next_to(b, LEFT, buff=0.06 + i * 0.16)
+                g.add(d)
+            cap = Text("keeps going", font=MONO, font_size=12, color=DUST)
+        else:
+            cap = Text("stays put", font=MONO, font_size=12, color=DUST)
+        cap.next_to(base, DOWN, buff=0.18)
+        g.add(cap)
+        return g
