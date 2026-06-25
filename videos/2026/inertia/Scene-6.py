@@ -49,30 +49,6 @@ def corner_L(orientation, size=0.20, color=AMBER, width=1.4, opacity=0.7):
     return g
 
 
-def safe_image(name, target_width, fallback_label):
-    """Load an image by name; if it isn't present yet, return a framed
-    placeholder slot so the script always runs as-is. (From Scene 1.)"""
-    try:
-        img = ImageMobject(name)
-        img.set(width=target_width)
-        return img
-    except Exception:
-        h = target_width * 0.72
-        slot = VGroup()
-        plate = Rectangle(width=target_width, height=h,
-                          fill_color=PANEL, fill_opacity=1.0,
-                          stroke_color=DUST, stroke_width=1.2,
-                          stroke_opacity=0.4)
-        lbl = Text(fallback_label, font=MONO, font_size=13, color=DUST)
-        lbl.move_to(plate.get_center())
-        slot.add(plate, lbl)
-        for o in (UL, UR, DL, DR):
-            c = corner_L(o, size=0.14, color=AMBER, opacity=0.55)
-            c.move_to(plate.get_corner(o), aligned_edge=o)
-            slot.add(c)
-        return slot
-
-
 def make_bowling_ball(radius=0.62):
     """Dense, dark sphere with three finger-holes — the tagged heavy character
     from Scenes 3–4. The face of 'm'. Exposes `.disc`, `.radius`. (From Scene 4.)"""
@@ -163,7 +139,7 @@ def ghost_disc(center, radius, color=C_MASS, opacity=0.34):
 
 
 # ─────────────────────────── new vocabulary for Scene 6 ───────────────────
-def serif(s, color=STARLIGHT, size=46, italic=True):
+def serif(s, color=STARLIGHT, size=50, italic=True):
     """The channel's idea/equation voice: Spectral, italic by default."""
     return Text(s, font=SERIF, slant=ITALIC if italic else NORMAL,
                 font_size=size, color=color)
@@ -239,12 +215,6 @@ class Scene6_WhyTheSquare(MovingCameraScene):
     W_R      = 0.21                 # mass-node radius
     N_STROBE = 7                    # equal-TIME strobe samples (Scene-1 constant)
     SPIN_T   = 3.2                  # seconds per full turn (sets the shared clock)
-
-    # ── honest physics (everything visible derives from these) ────────────
-    #   constant angular velocity ω over the scene's spins -> linear rate_func
-    #   is the PHYSICALLY honest easing here (constant ω is the exception the
-    #   style guide carves out). speed v = ω·r, so the outer mass moves at
-    #   exactly twice the inner's: v_outer / v_inner = R_OUTER / R_INNER = 2.
     OMEGA = TAU / SPIN_T
 
     def construct(self):
@@ -302,18 +272,18 @@ class Scene6_WhyTheSquare(MovingCameraScene):
                   rate_func=linear)
         self.wait(0.4)
 
-        intro = serif("Forget the whole rod — just watch one piece.",
+        intro = serif("Forget the whole rod, just watch one piece.",
                       STARLIGHT, 28).to_edge(UP, buff=0.7).set_z_index(9)
         self.play(FadeIn(intro, shift=DOWN * 0.08), run_time=0.7)
 
         # >>> POST (light): a soft focus-pull whoosh as the world dims to ghost.
         # strip to one honest object: the twin + rod body fall to faint outline
-        surviving = m_out
+        surviving = m_in_twin
         self.play(
-            m_in_twin.animate.set_opacity(0.10),
+            m_out.animate.set_opacity(0.10),
             rod.animate.set_opacity(0.12),
-            run_time=1.0, rate_func=rate_functions.ease_in_out_cubic,
-        )
+            crosshair.animate.set_opacity(0.10),
+            rate_func=rate_functions.ease_in_out_cubic)
 
         # focus-pull: a brief camera push-in onto the surviving mass, then settle
         if self.USE_FOCUS_PULL:
@@ -321,34 +291,32 @@ class Scene6_WhyTheSquare(MovingCameraScene):
                       run_time=1.0, rate_func=rate_functions.ease_in_out_sine)
             self.play(surviving.animate.set_stroke(width=3.2),
                       rate_func=there_and_back, run_time=0.7)
-            self.play(Restore(self.camera.frame), run_time=1.0,
+            self.play(Restore(self.camera.frame),
                       rate_func=rate_functions.ease_in_out_sine)
-
-        # the dashed line that became a radius in Scene 5 snaps to a single arm
+        
         radius = DashedLine(c, surviving.get_center(), dash_length=0.16,
                             dashed_ratio=0.6, stroke_color=C_LEN,
-                            stroke_width=3.0).set_z_index(4)
+                            stroke_width=3.0).set_z_index(4)   
+
         r_lab = serif("r", C_LEN, 30)
         r_lab.next_to(radius, UP, buff=0.16)
-        self.play(ReplacementTransform(rod.copy().set_opacity(1), radius),
-                  run_time=0.9, rate_func=rate_functions.ease_in_out_cubic)
-        self.play(FadeIn(r_lab, shift=UP * 0.06), run_time=0.5)
-        self.remove(rod, m_in_twin)   # the ghosts have done their job
 
+        self.remove(m_out)   # the ghosts have done their job
+ 
         self.play(FadeOut(intro), run_time=0.5)
         self.wait(0.7)
+
+        self.play(crosshair.animate.set_opacity(1.0), run_time=0.4)
 
         # hand the clean tableau forward
         self.crosshair = crosshair
         self.radius = radius
         self.r_lab = r_lab
         self.m_out = surviving
+        self.rod = rod
 
     # ═══════════════════════════════════════════════════════════════ A2 ═══
     def act2_two_circles_one_spin(self):
-        """Add a second mass at HALF the radius on the same spoke. Spin one turn;
-        trace both paths into concentric circles. Prove same-spin = same-time =
-        same-angle with a shared swept wedge + a rigid spoke that can't drift."""
         c = self.pivot_pt
         theta = ValueTracker(0.0)
         self.theta = theta
@@ -378,7 +346,6 @@ class Scene6_WhyTheSquare(MovingCameraScene):
             c, out_pos(), dash_length=0.16, dashed_ratio=0.6,
             stroke_color=C_LEN, stroke_width=3.0).set_z_index(4))
 
-        self.play(FadeOut(self.radius), FadeOut(self.r_lab), run_time=0.4)
         self.add(spoke, live_r)
         self.play(FadeIn(m_in, scale=0.85), run_time=0.6)
         half_lbl = serif("half as far", C_LEN, 22).next_to(m_in, DOWN, buff=0.22)
@@ -422,47 +389,16 @@ class Scene6_WhyTheSquare(MovingCameraScene):
 
     # ═══════════════════════════════════════════════════════════════ A3 ═══
     def act3_farther_means_faster(self):
-        """The payoff of the oldest grammar. Strobe both masses with equal-time
-        ghosts: outer spaced far, inner bunched tight — spacing IS speed. Then
-        unroll the arcs into straight tracks and race them. Land on: r → 2r
-        doubles the velocity arrow. distance ×2 → speed ×2 (linear)."""
         c = self.pivot_pt
         theta = self.theta
         self.play(FadeOut(self.same_lbl), run_time=0.4)
-
-        # ── (a) STROBE: equal-time stamps along each circle ────────────────
-        if self.ACT3_MODE in ("strobe", "both"):
-            def stamps(radius, color):
-                g = VGroup()
-                for k in range(self.N_STROBE + 1):
-                    ang = TAU * (k / self.N_STROBE)
-                    op = 0.16 + 0.34 * (k / self.N_STROBE)
-                    g.add(ghost_disc(c + radius * dir2(ang), self.W_R * 0.9,
-                                     color, op))
-                return g.set_z_index(2)
-
-            g_out = stamps(self.R_OUTER, C_MASS)
-            g_in = stamps(self.R_INNER, C_MASS)
-            # reset the spoke to θ=0 so the live masses sit at the first stamp
-            theta.set_value(0.0)
-            # drop stamps in TIME order while the spoke sweeps once more
-            self.play(
-                theta.animate.set_value(TAU),
-                LaggedStart(*[FadeIn(s) for s in g_out], lag_ratio=0.11),
-                LaggedStart(*[FadeIn(s) for s in g_in], lag_ratio=0.11),
-                run_time=self.SPIN_T, rate_func=linear,
-            )
-            read = serif("spacing is speed", AMBER, 24).to_edge(UP, buff=0.7)
-            self.play(FadeIn(read, shift=DOWN * 0.06), run_time=0.6)
-            self.wait(1.1)
-            self.play(FadeOut(read), FadeOut(g_out), FadeOut(g_in), run_time=0.6)
 
         # ── (b) UNROLL: peel each arc into a straight track and race ────────
         if self.ACT3_MODE in ("unroll", "both"):
             # clear the orbital furniture, keep the locked pivot
             self.m_out.clear_updaters(); self.m_in.clear_updaters()
             self.play(
-                FadeOut(VGroup(self.circ_out, self.circ_in, self.spoke,
+                FadeOut(VGroup(self.spoke,
                                self.live_r, self.m_out, self.m_in)),
                 run_time=0.7,
             )
@@ -483,13 +419,14 @@ class Scene6_WhyTheSquare(MovingCameraScene):
             arc_in = Arc(radius=self.R_INNER, start_angle=PI / 2, angle=TAU,
                          arc_center=c, stroke_color=C_LEN, stroke_width=2.6)
             self.add(arc_out, arc_in)
+            self.remove(self.circ_out, self.circ_in, self.rod, self.crosshair)
             self.play(
                 ReplacementTransform(arc_out, track_out),
                 ReplacementTransform(arc_in, track_in),
-                run_time=1.1, rate_func=rate_functions.ease_in_out_cubic,
+                rate_func=rate_functions.ease_in_out_cubic,
             )
-            lab_far = serif("far mass", AMBER, 20).next_to(track_out, LEFT, buff=0.3)
-            lab_near = serif("near mass", C_LEN, 20).next_to(track_in, LEFT, buff=0.3)
+            lab_far = serif("far mass", AMBER, 28).next_to(track_out, LEFT, buff=0.3)
+            lab_near = serif("near mass", C_LEN, 28).next_to(track_in, LEFT, buff=0.3)
             self.play(FadeIn(lab_far), FadeIn(lab_near), run_time=0.5)
 
             # race: both start together, finish together — top sprints
@@ -546,20 +483,16 @@ class Scene6_WhyTheSquare(MovingCameraScene):
 
         self.wait(1.0)
         self.play(FadeOut(VGroup(long_r, mass, v_arr2, r2_tag, v2_tag,
-                                 link, linear_tag)), run_time=0.7)
-        # keep the crosshair locked for the rest of the scene
+                                 link, linear_tag, self.crosshair)), run_time=0.7)
 
     # ═══════════════════════════════════════════════════════════════ A4 ═══
     def act4_cost_is_a_square(self):
-        """The second ingredient, as a literal area. A v-length bar grows
-        sideways into a v×v square — that square IS the cost. Double the side to
-        2v and it fills as a 2×2 grid: four tiles. speed ×2 → cost ×4."""
         recall = serif("the cost of motion grows with speed²", STARLIGHT, 28)
         recall.to_edge(UP, buff=0.7).set_z_index(9)
         self.play(FadeIn(recall, shift=DOWN * 0.06), run_time=0.7)
 
         u = 1.3   # one 'v' in screen units
-        base_corner = LEFT * 1.0 + DOWN * 1.2
+        base_corner = LEFT * 1.0
 
         # the velocity bar of length v
         bar = Line(base_corner, base_corner + RIGHT * u, stroke_color=C_VEL,
@@ -625,60 +558,12 @@ class Scene6_WhyTheSquare(MovingCameraScene):
             self.play(FadeIn(four), FadeIn(side_b), FadeIn(four_eq), run_time=0.7)
 
         self.wait(0.6)
-        prop = serif("cost ∝ speed²", AMBER, 30).to_edge(DOWN, buff=0.75)
-        self.play(FadeIn(prop, shift=UP * 0.06), run_time=0.7)
-        self.wait(1.4)
 
-        self.play(FadeOut(VGroup(recall, big_sq, four, side_b, four_eq, prop)),
+        self.play(FadeOut(VGroup(recall, big_sq, four, side_b, four_eq)),
                   run_time=0.8)
 
     # ═══════════════════════════════════════════════════════════════ A5 ═══
     def act5_double_becomes_quadruple(self):
-        """CRUX. Chain Act 3 and Act 4: a '×2' token slides in from distance,
-        passes through the v² square, and EMERGES as '×4'. Then hold the side-by-
-        side cost meters — 1 unit vs 4 units — and let r square itself."""
-        # ── the multiplier relay: ×2 enters, ×4 leaves ────────────────────
-        d_tok = serif("×2", C_LEN, 40).move_to(LEFT * 4.6)
-        d_lab = Text("DISTANCE", font=MONO, font_size=14, color=DUST).next_to(
-            d_tok, UP, buff=0.2)
-        square = Square(side_length=1.5, stroke_color=C_ENERGY, stroke_width=2.4,
-                        fill_color=C_ENERGY, fill_opacity=0.18).move_to(ORIGIN)
-        sq_lab = squared("v", C_ENERGY, 28).move_to(square.get_center())
-        out_tok = serif("×4", AMBER, 48).move_to(RIGHT * 4.6)
-        out_lab = Text("COST", font=MONO, font_size=14, color=AMBER).next_to(
-            out_tok, UP, buff=0.2)
-
-        self.play(FadeIn(d_tok, shift=RIGHT * 0.1), FadeIn(d_lab), run_time=0.6)
-        self.play(GrowFromEdge(square, DOWN), FadeIn(sq_lab), run_time=0.7)
-        self.wait(0.4)
-
-        speed_tok = serif("×2", C_VEL, 40)
-        speed_lab = Text("SPEED", font=MONO, font_size=14, color=C_VEL)
-        # ×2 (distance) travels to the square, becoming ×2 (speed) on the way
-        self.play(d_tok.animate.move_to(LEFT * 1.9),
-                  FadeOut(d_lab), run_time=0.8,
-                  rate_func=rate_functions.ease_in_out_cubic)
-        speed_tok.move_to(LEFT * 1.9)
-        speed_lab.next_to(speed_tok, UP, buff=0.2)
-        self.play(ReplacementTransform(d_tok, speed_tok), FadeIn(speed_lab),
-                  run_time=0.5)
-        self.wait(0.3)
-
-        # the token passes THROUGH the square and emerges quadrupled
-        self.play(speed_tok.animate.move_to(square.get_center()).scale(0.7),
-                  FadeOut(speed_lab), run_time=0.7,
-                  rate_func=rate_functions.ease_in_cubic)
-        self.play(Indicate(square, scale_factor=1.18, color=AMBER), run_time=0.6)
-        self.play(ReplacementTransform(speed_tok, out_tok), FadeIn(out_lab),
-                  run_time=0.8, rate_func=rate_functions.ease_out_cubic)
-        # >>> POST: a single low resonant cue as ×2 emerges as ×4.
-        self.play(Indicate(out_tok, scale_factor=1.22, color=AMBER), run_time=0.7)
-
-        if self.CRUX_HOLD == "relay":
-            self.wait(2.6)   # hold the relay as the crux frame
-
-        self.play(FadeOut(VGroup(square, sq_lab, out_tok, out_lab)), run_time=0.7)
-
         # ── the crux tableau: two masses, two cost meters (1 vs 4) ─────────
         cL = LEFT * 3.4 + DOWN * 0.3
         cR = RIGHT * 1.0 + DOWN * 0.3
@@ -774,21 +659,13 @@ class Scene6_WhyTheSquare(MovingCameraScene):
         self.play(Write(rr_lab.exp), run_time=0.4)   # the exponent appears: r → r²
         self.wait(0.4)
 
-        seal = serif("distance doesn't count once — it counts squared",
-                     STARLIGHT, 26).to_edge(DOWN, buff=0.6).set_z_index(9)
-        self.play(FadeIn(seal, shift=UP * 0.06), run_time=0.8)
-        self.wait(1.6)
-
         # hand the r² square forward to Act 6
         self.rr_square = rr_square
         self.rr_lab = rr_lab
-        self._a5_clear = VGroup(seg, up_edge, r_side, seal)
+        self._a5_clear = VGroup(seg, up_edge, r_side)
 
     # ═══════════════════════════════════════════════════════════════ A6 ═══
     def act6_assemble_the_formula(self):
-        """Assemble I = m r² from parts the viewer already owns. Bring back m
-        (the bowling-ball laziness number), dock it onto the r² square, and let
-        each symbol pulse toward the act that earned it. End held, clean."""
         self.play(FadeOut(self._a5_clear), run_time=0.6)
 
         # shrink the r² square up into formula scale and park it on the right
@@ -828,9 +705,9 @@ class Scene6_WhyTheSquare(MovingCameraScene):
         self.wait(0.6)
 
         # annotate each term with the act that earned it (mono, the quiet voice)
-        a_I = Text("rotational stubbornness", font=MONO, font_size=13, color=DUST)
-        a_m = Text("how lazy it is", font=MONO, font_size=13, color=C_MASS)
-        a_r = Text("how far — counted squared", font=MONO, font_size=13, color=C_LEN)
+        a_I = Text("rotational stubbornness", font=MONO, font_size=22, color=DUST)
+        a_m = Text("how lazy it is", font=MONO, font_size=22, color=C_MASS)
+        a_r = Text("how far — counted squared", font=MONO, font_size=22, color=C_LEN)
         a_I.next_to(I_sym, UP, buff=0.55)
         a_m.next_to(m_sym, DOWN, buff=0.9)
         a_r.next_to(r2_sym, UP, buff=0.55)
@@ -849,4 +726,4 @@ class Scene6_WhyTheSquare(MovingCameraScene):
         held = VGroup(formula, rule)
         self.play(held.animate.move_to(ORIGIN).scale(1.06), run_time=1.0,
                   rate_func=rate_functions.ease_in_out_cubic)
-        self.wait(2.4)
+        self.wait()
